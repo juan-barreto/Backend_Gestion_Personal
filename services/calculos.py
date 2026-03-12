@@ -1,5 +1,5 @@
-from ipc import obtener_ipc
-from icl import obtener_icl
+from routes.ipc import obtener_ipc
+from routes.icl import obtener_icl
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 

@@ -5,3 +5,8 @@ def obtener_ripte():
     respuesta = requests.get(url)
     datos = respuesta.json()
     return datos["data"]
+
+
+
+if __name__ == "__main__":
+    print(obtener_ripte())

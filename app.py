@@ -1,10 +1,10 @@
 from flask import Flask, jsonify, request
 from database import creacion_tabla
-from dolar import obtener_todos
-from ipc import obtener_ipc
-from icl import obtener_icl
-from ripte import obtener_ripte
-from calculos import calcular_ajuste
+from routes.dolar import obtener_todos
+from routes.ipc import obtener_ipc
+from routes.icl import obtener_icl
+from routes.ripte import obtener_ripte
+from services.calculos import calcular_ajuste
 
 app = Flask(__name__)
 
