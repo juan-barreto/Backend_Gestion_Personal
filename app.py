@@ -1,0 +1,52 @@
+from flask import Flask, jsonify, request
+from database import creacion_tabla
+from dolar import obtener_todos
+from ipc import obtener_ipc
+from icl import obtener_icl
+from ripte import obtener_ripte
+from calculos import calcular_ajuste
+
+app = Flask(__name__)
+
+
+@app.route("/")
+def inicio():
+    return jsonify({"mensaje": "API funcionando"})
+
+
+@app.route("/dolar")
+def dolar():
+    datos = obtener_todos()
+    return jsonify(datos)
+
+
+@app.route("/ipc")
+def ipc():
+    datos = obtener_ipc()
+    return jsonify(datos)
+
+
+@app.route("/icl")
+def icl():
+    datos = obtener_icl()
+    return jsonify(datos)
+
+@app.route("/ripte")
+def ripte():
+    datos = obtener_ripte()
+    return jsonify(datos)
+
+
+@app.route("/calcular-ajuste", methods = ["POST"])
+def calcular_ajuste_endpoint():
+    body = request.get_json()
+    alquiler = float(body["alquiler"])
+    fecha_inicio = body["fecha_inicio"]
+    indice =   body.get("indice", "ipc")#al tener dos valors, funciona como un if, si el primer key no aparece ,toma el valor del segundo por defecto sin buscar key
+    resultado = calcular_ajuste(alquiler, fecha_inicio, indice)
+    return jsonify(resultado)
+
+if __name__ == "__main__":
+    creacion_tabla()
+    app.run(debug=True)
+
