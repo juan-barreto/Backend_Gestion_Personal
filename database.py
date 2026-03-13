@@ -2,6 +2,7 @@ import sqlite3
 from datetime import datetime
 
 
+
 def creacion_tabla():
     
     conexion = sqlite3.connect("dolar.db")
@@ -20,6 +21,37 @@ def creacion_tabla():
     """)
     conexion.commit()
     conexion.close()
+def creacion_tabla_alquiler():
+    
+    conexion = sqlite3.connect("dolar.db")
+    cursor = conexion.cursor()
+
+    cursor.execute("""
+            CREATE TABLE IF NOT EXISTS calculo_alquiler (
+               id INTEGER PRIMARY KEY AUTOINCREMENT,
+               alquiler_inicial REAL,
+               alquiler_final REAL,
+               fecha_inicio TEXT,
+               fecha_calculo TEXT,
+               tipo_indice TEXT
+               
+               
+               )
+    """)
+    conexion.commit()
+    conexion.close()
+def guardar_ajuste(alquiler_inicial,alquiler_final,fecha_inicio,fecha_calculo,indice):
+    conexion = sqlite3.connect("dolar.db")
+    cursor = conexion.cursor()
+
+    cursor.execute("""
+               INSERT INTO calculo_alquiler (alquiler_inicial, alquiler_final, fecha_inicio, fecha_calculo, tipo_indice)
+               VALUES (?, ?, ?, ?, ?)
+               """, (alquiler_inicial, alquiler_final, fecha_inicio, fecha_calculo, indice))
+
+    conexion.commit()
+    conexion.close()
+
 
 def guardar_cotizacion(fuente,venta,compra):
     conexion = sqlite3.connect("dolar.db")
@@ -47,4 +79,5 @@ def mostrar_cotizacion():
 
 if __name__ == "__main__":
     creacion_tabla()
+    creacion_tabla_alquiler()
     mostrar_cotizacion()

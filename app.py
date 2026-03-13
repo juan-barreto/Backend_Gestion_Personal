@@ -1,10 +1,11 @@
 from flask import Flask, jsonify, request
-from database import creacion_tabla
+from database import creacion_tabla, creacion_tabla_alquiler,guardar_ajuste
 from routes.dolar import obtener_todos
 from routes.ipc import obtener_ipc
 from routes.icl import obtener_icl
 from routes.ripte import obtener_ripte
 from services.calculos import calcular_ajuste
+from datetime import datetime
 
 app = Flask(__name__)
 
@@ -42,11 +43,14 @@ def calcular_ajuste_endpoint():
     body = request.get_json()
     alquiler = float(body["alquiler"])
     fecha_inicio = body["fecha_inicio"]
-    indice =   body.get("indice", "ipc")#al tener dos valors, funciona como un if, si el primer key no aparece ,toma el valor del segundo por defecto sin buscar key
+    fecha_calculo = datetime.now().isoformat()
+    indice =  body.get("indice", "ipc")#al tener dos valors, funciona como un if, si el primer key no aparece ,toma el valor del segundo por defecto sin buscar key
     resultado = calcular_ajuste(alquiler, fecha_inicio, indice)
+    guardar_ajuste(alquiler,resultado["historial"][-1]["alquiler"],fecha_inicio,fecha_calculo,indice)
     return jsonify(resultado)
 
 if __name__ == "__main__":
+    creacion_tabla_alquiler()
     creacion_tabla()
     app.run(debug=True)
 
