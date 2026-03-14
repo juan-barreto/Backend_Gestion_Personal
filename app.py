@@ -9,6 +9,10 @@ from datetime import datetime
 
 app = Flask(__name__)
 
+with app.app_context():
+    creacion_tabla()
+    creacion_tabla_alquiler()
+
 
 @app.route("/")
 def inicio():
