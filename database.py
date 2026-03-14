@@ -76,8 +76,30 @@ def mostrar_cotizacion():
         print(fila)
     conexion.close()
 
-
+def obtener_historial_alquiler():
+    conexion = sqlite3.connect("dolar.db")
+    cursor = conexion.cursor()
+    cursor.execute("SELECT * FROM calculo_alquiler")
+    resultados = cursor.fetchall()
+    historial = []
+    for fila in resultados:
+        new_fila = {
+           "id": fila[0],
+           "alquiler_inicial": fila[1],
+           "alquiler_final": fila[2],
+           "fecha_inicio": fila[3],
+           "fecha_calculo": fila[4],
+           "tipo_indice": fila[5]
+       }
+        historial.append(new_fila)
+    conexion.close()
+    return historial
+    
 if __name__ == "__main__":
     creacion_tabla()
     creacion_tabla_alquiler()
     mostrar_cotizacion()
+    obtener_historial_alquiler()
+
+
+

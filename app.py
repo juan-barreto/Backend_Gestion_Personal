@@ -1,5 +1,5 @@
 from flask import Flask, jsonify, request
-from database import creacion_tabla, creacion_tabla_alquiler,guardar_ajuste
+from database import creacion_tabla, creacion_tabla_alquiler,guardar_ajuste,obtener_historial_alquiler
 from routes.dolar import obtener_todos
 from routes.ipc import obtener_ipc
 from routes.icl import obtener_icl
@@ -48,7 +48,10 @@ def calcular_ajuste_endpoint():
     resultado = calcular_ajuste(alquiler, fecha_inicio, indice)
     guardar_ajuste(alquiler,resultado["historial"][-1]["alquiler"],fecha_inicio,fecha_calculo,indice)
     return jsonify(resultado)
-
+@app.route("/historial")
+def obtener_historial():
+    historial = obtener_historial_alquiler()
+    return jsonify(historial)
 if __name__ == "__main__":
     creacion_tabla_alquiler()
     creacion_tabla()
