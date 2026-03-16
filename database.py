@@ -100,8 +100,10 @@ def borrar_calculo(id: int):
     conexion = sqlite3.connect("dolar.db")
     cursor = conexion.cursor()
     cursor.execute("DELETE FROM calculo_alquiler WHERE id = ?" , (id,))
+    filas_encontradas = cursor.rowcount # cuántas filas borró
     conexion.commit()
     conexion.close()
+    return filas_encontradas # devuelve 0 si el id no existía
 
 def borrar_historial_completo():
     """Borra todos los registros del historial"""

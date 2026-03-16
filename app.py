@@ -95,7 +95,9 @@ def obtener_historial():
 #<int:id> toma el id de la URL y lo convierte en entero, no es una indicacion simplemente
 @app.route("/historial/<int:id>", methods=["DELETE"])
 def eliminar_calculo(id):
-    borrar_calculo(id)
+    filas = borrar_calculo(id)
+    if filas == 0:
+            return jsonify({"error": f"No existe el calculo con id {id}"}), 404
     return jsonify({"mensaje": f"Cálculo {id} eliminado"})
 
 @app.route("/historial", methods=["DELETE"])
