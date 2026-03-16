@@ -43,5 +43,5 @@ def calcular_ajuste(alquler_incial, fecha_inicio_str, tipo_indice):
         alquiler_actual = alquiler_actual * (valor_fin/valor_inicio)
         historial.append({"periodo": fecha_siguiente.strftime("%Y-%m-%d"), "alquiler": round(alquiler_actual,2)})
         fecha_actual = fecha_siguiente
-
+    
     return {"historial": historial, "proximo_ajuste": proximo_ajuste }

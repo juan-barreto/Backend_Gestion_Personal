@@ -94,7 +94,23 @@ def obtener_historial_alquiler():
         historial.append(new_fila)
     conexion.close()
     return historial
-    
+#(id: int) anotacion que indica el tipo de valor esperado
+def borrar_calculo(id: int):
+    """Borra un registro específico del historial por su id"""
+    conexion = sqlite3.connect("dolar.db")
+    cursor = conexion.cursor()
+    cursor.execute("DELETE FROM calculo_alquiler WHERE id = ?" , (id,))
+    conexion.commit()
+    conexion.close()
+
+def borrar_historial_completo():
+    """Borra todos los registros del historial"""
+    conexion = sqlite3.connect("dolar.db")
+    cursor = conexion.cursor()
+    cursor.execute("DELETE FROM calulo_alquiler")
+    conexion.commit()
+    conexion.close()
+
 if __name__ == "__main__":
     creacion_tabla()
     creacion_tabla_alquiler()
