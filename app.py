@@ -89,13 +89,15 @@ def obtener_variacion_dolar(casa):
                        / datos["anterior"]["venta"]) * 100
     
     return jsonify({
-        "casa": casa,
-        "venta_actual": datos["actual"]["venta"],
-        "venta_anterior": datos["anterior"]["venta"],
-        "variacion_porcentual": round(variacion_venta, 2),
-        "fecha_actual": datos["actual"]["fecha"],
-        "fecha_anterior": datos["anterior"]["fecha"]
-    })
+    "casa": casa,
+    "venta_actual": datos["actual"]["venta"],
+    "venta_anterior": datos["anterior"]["venta"],
+    "compra_actual": datos["actual"]["compra"],      # nueva
+    "compra_anterior": datos["anterior"]["compra"],  # nueva
+    "variacion_porcentual": round(variacion_venta, 2),
+    "fecha_actual": datos["actual"]["fecha"],
+    "fecha_anterior": datos["anterior"]["fecha"]
+})
 
 @app.route("/calcular-ajuste", methods=["POST"])
 def calcular_ajuste_endpoint():
