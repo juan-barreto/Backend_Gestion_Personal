@@ -76,17 +76,18 @@ def ripte():
     return jsonify(datos)
 
 
-@app.route("/calcular-ajuste", methods = ["POST"])
+@app.route("/calcular-ajuste", methods=["POST"])
 def calcular_ajuste_endpoint():
     body = request.get_json()
     alquiler = float(body["alquiler"])
     fecha_inicio = body["fecha_inicio"]
+    fecha_firma = body["fecha_firma"]        # ← nuevo
+    periodo = int(body["periodo"])           # ← nuevo, llega como número
     fecha_calculo = datetime.now().isoformat()
-    indice =  body.get("indice", "ipc")#al tener dos valors, funciona como un if, si el primer key no aparece ,toma el valor del segundo por defecto sin buscar key
-    resultado = calcular_ajuste(alquiler, fecha_inicio, indice)
-    guardar_ajuste(alquiler,resultado["historial"][-1]["alquiler"],fecha_inicio,fecha_calculo,indice)
+    indice = body.get("indice", "ipc")
+    resultado = calcular_ajuste(alquiler, fecha_inicio, indice, fecha_firma, periodo)
+    guardar_ajuste(alquiler, resultado["historial"][-1]["alquiler"], fecha_inicio, fecha_calculo, indice)
     return jsonify(resultado)
-
 
 @app.route("/historial")
 def obtener_historial():

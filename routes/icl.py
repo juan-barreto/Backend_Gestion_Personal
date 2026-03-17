@@ -1,8 +1,9 @@
 import requests
 
 def obtener_icl():
-    url = "https://api.bcra.gob.ar/estadisticas/v4.0/monetarias/40?limit=30"
-    respuesta = requests.get(url)
+    # limit=2000 trae ~5 años de datos diarios sin filtro de fecha
+    url = "https://api.bcra.gob.ar/estadisticas/v4.0/monetarias/40?limit=2000"
+    respuesta = requests.get(url, verify=False)
     datos = respuesta.json()
     return datos["results"][0]["detalle"]
 
