@@ -66,6 +66,42 @@ def guardar_cotizacion(fuente,venta,compra):
     conexion.commit()
     conexion.close()
 
+def obtener_cotizacion_anterior(fuente: str):
+    """Devuelve las últimas DOS cotizaciones de una casa para calcular variación"""
+    conexion = sqlite3.connect("dolar.db")
+    cursor = conexion.cursor()
+    
+    # Trae las últimas 2 entradas de esa casa ordenadas por fecha
+    # El ORDER BY DESC trae primero la más reciente
+    cursor.execute("""
+        SELECT venta, compra, fecha 
+        FROM cotizaciones 
+        WHERE fuente = ? 
+        ORDER BY fecha DESC 
+        LIMIT 2
+    """, (fuente,))
+    
+    resultados = cursor.fetchall()
+    conexion.close()
+    
+    # Si hay menos de 2 registros no podemos calcular variación
+    if len(resultados) < 2:
+        return None
+    
+    # resultados[0] es el actual, resultados[1] es el anterior
+    return {
+        "actual": {
+            "venta": resultados[0][0],
+            "compra": resultados[0][1],
+            "fecha": resultados[0][2]
+        },
+        "anterior": {
+            "venta": resultados[1][0],
+            "compra": resultados[1][1],
+            "fecha": resultados[1][2]
+        }
+    }
+
 def mostrar_cotizacion():
     conexion = sqlite3.connect("dolar.db")
     cursor = conexion.cursor()
@@ -109,7 +145,7 @@ def borrar_historial_completo():
     """Borra todos los registros del historial"""
     conexion = sqlite3.connect("dolar.db")
     cursor = conexion.cursor()
-    cursor.execute("DELETE FROM calulo_alquiler")
+    cursor.execute("DELETE FROM calculo_alquiler")
     conexion.commit()
     conexion.close()
 
