@@ -6,7 +6,7 @@ from routes.ipc import obtener_ipc
 from routes.icl import obtener_icl
 from routes.ripte import obtener_ripte
 from services.calculos import calcular_ajuste
-from database import guardar_cotizacion
+from database import guardar_cotizacion, obtener_cotizacion_anterior
 from datetime import datetime
 import requests as req_interno
 
@@ -75,6 +75,27 @@ def ripte():
     datos = obtener_ripte()
     return jsonify(datos)
 
+@app.route("/dolar/variacion/<casa>")
+def obtener_variacion_dolar(casa):
+    """Devuelve el valor actual vs anterior para calcular la flecha"""
+    datos = obtener_cotizacion_anterior(casa)
+    
+    if datos is None:
+        return jsonify({"error": "Sin historial suficiente"}), 404
+    
+    # Calculamos la variación porcentual
+    # ((actual - anterior) / anterior) * 100
+    variacion_venta = ((datos["actual"]["venta"] - datos["anterior"]["venta"]) 
+                       / datos["anterior"]["venta"]) * 100
+    
+    return jsonify({
+        "casa": casa,
+        "venta_actual": datos["actual"]["venta"],
+        "venta_anterior": datos["anterior"]["venta"],
+        "variacion_porcentual": round(variacion_venta, 2),
+        "fecha_actual": datos["actual"]["fecha"],
+        "fecha_anterior": datos["anterior"]["fecha"]
+    })
 
 @app.route("/calcular-ajuste", methods=["POST"])
 def calcular_ajuste_endpoint():
