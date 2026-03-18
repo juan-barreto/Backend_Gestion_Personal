@@ -1,45 +1,121 @@
 from groq import Groq
 import os
+import sqlite3
 
-# El cliente toma la API key de las variables de entorno
-# En Railway la configurás en Settings → Variables
 client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
-# System prompt — le dice al modelo quién es y cómo debe responder
-SYSTEM_PROMPT = """Sos un asistente financiero especializado en la economía argentina.
-Tu nombre es Clara, sos parte de la app Plata Clara de CandleLabs.
+# System prompt BASE — lo que Clara siempre sabe
+SYSTEM_PROMPT_BASE = """Sos Clara, asistente financiera de la app Plata Clara de CandleLabs.
+Especializada en economía argentina: inflación, dólar, alquileres, IPC, ICL, RIPTE.
+
+REGLAS ESTRICTAS:
+- Respondé en máximo 3 oraciones. Si te piden una lista, podés extenderte.
+- Usá español rioplatense, simple y directo. Sin tecnicismos innecesarios.
+- NUNCA inventes datos ni busques en internet. Solo usá lo que tenés en este contexto.
+- Si no sabés algo con certeza, decilo claramente.
+- Si el usuario tiene datos en su perfil, usalos para personalizar la respuesta.
 
 Podés ayudar con:
-- Explicar índices económicos: IPC, ICL, RIPTE, dólar blue, MEP, CCL
-- Interpretar contratos de alquiler y ajustes según la ley argentina
-- Responder sobre el contexto económico argentino actual
-- Explicar cómo afectan las noticias económicas al bolsillo del argentino
-- Dar consejos de finanzas personales adaptados a la realidad argentina
+- Índices económicos: IPC, ICL, RIPTE, dólar blue, MEP, CCL
+- Contratos de alquiler y ajustes según ley argentina (DNU 70/2023)
+- Contexto económico argentino actual
+- Finanzas personales adaptadas a la realidad argentina"""
 
-Respondé siempre en español rioplatense, de forma clara y sin tecnicismos innecesarios.
-Sé conciso — máximo 3 párrafos por respuesta.
-Si no sabés algo con certeza, decilo claramente."""
 
-def consultar_asistente(mensaje: str, historial: list = []) -> str:
+def obtener_contexto_usuario(nombre: str) -> str:
     """
-    Envía un mensaje a Groq y devuelve la respuesta.
-    historial: lista de mensajes anteriores para mantener contexto
-    """
-    # Construimos los mensajes — system + historial + mensaje nuevo
-    mensajes = [{"role": "system", "content": SYSTEM_PROMPT}]
+    Busca en la DB los datos reales del usuario y construye
+    el bloque de contexto para inyectar en el system prompt.
     
-    # Agregamos el historial de la conversación
-    for msg in historial:
+    Equivalente en Python puro:
+    contexto = f"El usuario se llama {nombre} y su último alquiler fue..."
+    """
+    contexto = f"\n\nCONTEXTO DEL USUARIO '{nombre}':\n"
+
+    try:
+        conexion = sqlite3.connect("dolar.db")
+        cursor = conexion.cursor()
+
+        # Último cálculo de alquiler
+        cursor.execute("""
+            SELECT alquiler_inicial, alquiler_final, fecha_inicio, 
+                   fecha_calculo, tipo_indice
+            FROM calculo_alquiler 
+            ORDER BY fecha_calculo DESC 
+            LIMIT 1
+        """)
+        alquiler = cursor.fetchone()
+
+        if alquiler:
+            contexto += (
+                f"- Último alquiler calculado: inicial ${alquiler[0]:,.0f}, "
+                f"ajustado ${alquiler[1]:,.0f}\n"
+                f"- Índice usado: {alquiler[4].upper()}\n"
+                f"- Fecha de inicio del período: {alquiler[2]}\n"
+                f"- Calculado el: {alquiler[3][:10]}\n"
+            )
+        else:
+            contexto += "- No tiene cálculos de alquiler registrados todavía.\n"
+
+        # Últimas cotizaciones del dólar
+        cursor.execute("""
+            SELECT fuente, venta, compra, fecha
+            FROM cotizaciones
+            WHERE fuente IN ('blue', 'oficial', 'mep')
+            GROUP BY fuente
+            HAVING fecha = MAX(fecha)
+            ORDER BY fecha DESC
+        """)
+        dolares = cursor.fetchall()
+
+        if dolares:
+            contexto += "- Cotizaciones actuales del dólar:\n"
+            for d in dolares:
+                contexto += f"  · {d[0].capitalize()}: compra ${d[2]:,.0f} / venta ${d[1]:,.0f}\n"
+        else:
+            contexto += "- Sin cotizaciones del dólar en la base de datos todavía.\n"
+
+        conexion.close()
+
+    except Exception as e:
+        # Si falla la DB, Clara sigue funcionando sin contexto
+        contexto += f"- No se pudo cargar el contexto del usuario ({str(e)}).\n"
+
+    return contexto
+
+
+def construir_system_prompt(nombre: str) -> str:
+    """
+    Une el prompt base con el contexto dinámico del usuario.
+    Equivalente en Python: f"{base}\n\n{contexto}"
+    """
+    contexto = obtener_contexto_usuario(nombre)
+    return SYSTEM_PROMPT_BASE + contexto
+
+
+def consultar_asistente(mensaje: str, historial: list = [], nombre: str = "Usuario") -> str:
+    """
+    Envía un mensaje a Groq con el contexto real del usuario inyectado.
+    historial: últimos N mensajes para mantener contexto de conversación.
+    nombre: nombre del usuario para personalizar el system prompt.
+    """
+    # Construimos el system prompt dinámico con los datos reales
+    system_prompt = construir_system_prompt(nombre)
+
+    mensajes = [{"role": "system", "content": system_prompt}]
+
+    # Solo mandamos los últimos 10 mensajes para no superar el límite de tokens
+    # Equivalente en Python: historial[-10:]
+    for msg in historial[-10:]:
         mensajes.append(msg)
-    
-    # Agregamos el mensaje nuevo del usuario
+
     mensajes.append({"role": "user", "content": mensaje})
-    
+
     respuesta = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=mensajes,
         max_tokens=500,
         temperature=0.7
     )
-    
+
     return respuesta.choices[0].message.content

@@ -71,11 +71,12 @@ def asistente():
     body = request.get_json()
     mensaje = body.get("mensaje", "")
     historial = body.get("historial", [])
-    
+    nombre = body.get("nombre", "Usuario")  # nuevo campo
+
     if not mensaje:
         return jsonify({"error": "Mensaje vacío"}), 400
-    
-    respuesta = consultar_asistente(mensaje, historial)
+
+    respuesta = consultar_asistente(mensaje, historial, nombre)
     return jsonify({"respuesta": respuesta})
 
 
