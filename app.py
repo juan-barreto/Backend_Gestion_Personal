@@ -18,6 +18,7 @@ app = Flask(__name__)
 with app.app_context():
     creacion_tabla()
     creacion_tabla_alquiler()
+    actualizar_cotizaciones()
 
 
 # Paso 2 — funciones que va a ejecutar el scheduler
