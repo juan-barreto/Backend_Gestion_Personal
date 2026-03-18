@@ -40,6 +40,27 @@ def creacion_tabla_alquiler():
     """)
     conexion.commit()
     conexion.close()
+
+def creacion_tabla_presupuesto():
+    """Crea la tabla de movimientos de presupuesto si no existe"""
+    conexion = sqlite3.connect("dolar.db")
+    cursor = conexion.cursor()
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS presupuesto (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tipo TEXT NOT NULL,         -- 'ingreso' o 'gasto'
+            categoria TEXT NOT NULL,    -- 'Sueldo', 'Alquiler', etc
+            descripcion TEXT,           -- detalle opcional del usuario
+            monto REAL NOT NULL,        -- siempre positivo, el tipo define si suma o resta
+            fecha TEXT NOT NULL         -- formato ISO: '2026-03-18T22:00:00'
+        )
+    """)
+
+    conexion.commit()
+    conexion.close()
+
+
 def guardar_ajuste(alquiler_inicial,alquiler_final,fecha_inicio,fecha_calculo,indice):
     conexion = sqlite3.connect("dolar.db")
     cursor = conexion.cursor()
@@ -176,6 +197,88 @@ def borrar_historial_completo():
     cursor.execute("DELETE FROM calculo_alquiler")
     conexion.commit()
     conexion.close()
+#----------------------------------------------------------------------------------------------------------------
+#Funcionalidades CRUD para tabla presupuesto:
+def agregar_movimiento(tipo: str, categoria: str, descripcion: str, monto: float):
+    """Agrega un ingreso o gasto al presupuesto"""
+    conexion = sqlite3.connect("dolar.db")
+    cursor = conexion.cursor()
+    fecha = datetime.now().isoformat()
+
+    cursor.execute("""
+        INSERT INTO presupuesto (tipo, categoria, descripcion, monto, fecha)
+        VALUES (?, ?, ?, ?, ?)
+    """, (tipo, categoria, descripcion, monto, fecha))
+
+    conexion.commit()
+    conexion.close()
+
+def editar_movimiento(id: int, tipo: str, categoria: str, descripcion: str, monto: float):
+    """Edita un movimiento existente por su id"""
+    conexion = sqlite3.connect("dolar.db")
+    cursor = conexion.cursor()
+
+    cursor.execute("""
+        UPDATE presupuesto
+        SET tipo = ?, categoria = ?, descripcion = ?, monto = ?
+        WHERE id = ?
+    """, (tipo, categoria, descripcion, monto, id))
+
+    filas = cursor.rowcount  # 0 si el id no existía
+    conexion.commit()
+    conexion.close()
+    return filas
+
+def obtener_movimientos(filtro: str = "mensual") -> list:
+    """
+    Devuelve los movimientos según el filtro temporal.
+    filtro: 'semanal', 'mensual' o 'anual'
+    
+    Equivalente en Python:
+    [m for m in movimientos if m['fecha'] >= fecha_inicio]
+    """
+    conexion = sqlite3.connect("dolar.db")
+    cursor = conexion.cursor()
+
+    # Definimos el filtro de fecha según la opción elegida
+    if filtro == "semanal":
+        condicion = "fecha >= datetime('now', '-7 days')"
+    elif filtro == "anual":
+        condicion = "strftime('%Y', fecha) = strftime('%Y', 'now')"
+    else:  # mensual por defecto
+        condicion = "strftime('%Y-%m', fecha) = strftime('%Y-%m', 'now')"
+
+    cursor.execute(f"""
+        SELECT id, tipo, categoria, descripcion, monto, fecha
+        FROM presupuesto
+        WHERE {condicion}
+        ORDER BY fecha DESC
+    """)
+
+    resultados = cursor.fetchall()
+    conexion.close()
+
+    return [
+        {
+            "id": fila[0],
+            "tipo": fila[1],
+            "categoria": fila[2],
+            "descripcion": fila[3],
+            "monto": fila[4],
+            "fecha": fila[5]
+        }
+        for fila in resultados
+    ]
+
+def borrar_movimiento(id: int) -> int:
+    """Borra un movimiento por su id. Devuelve 0 si no existía."""
+    conexion = sqlite3.connect("dolar.db")
+    cursor = conexion.cursor()
+    cursor.execute("DELETE FROM presupuesto WHERE id = ?", (id,))
+    filas = cursor.rowcount
+    conexion.commit()
+    conexion.close()
+    return filas
 
 if __name__ == "__main__":
     creacion_tabla()

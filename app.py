@@ -7,6 +7,7 @@ from routes.icl import obtener_icl
 from routes.ripte import obtener_ripte
 from services.calculos import calcular_ajuste
 from database import guardar_cotizacion, obtener_cotizacion_anterior, obtener_historial_cotizacion
+from database import creacion_tabla_presupuesto, agregar_movimiento, obtener_movimientos, editar_movimiento,borrar_movimiento
 from datetime import datetime
 import requests as req_interno
 from services.asistente import consultar_asistente
@@ -40,6 +41,7 @@ def ping_propio():
 with app.app_context():
     creacion_tabla()
     creacion_tabla_alquiler()
+    creacion_tabla_presupuesto()
     actualizar_cotizaciones()
 
 
@@ -161,6 +163,53 @@ def eliminar_calculo(id):
 def eliminar_historial():
     borrar_historial_completo()
     return jsonify({"mensaje": "Historial eliminado"})
+
+#--------------------------------------------------------------------------------------
+#Endpoints presupuesto
+
+@app.route("/presupuesto")
+def obtener_presupuesto():
+    # ?filtro=semanal / mensual / anual
+    filtro = request.args.get("filtro", "mensual")
+    movimientos = obtener_movimientos(filtro)
+    return jsonify(movimientos)
+
+@app.route("/presupuesto", methods=["POST"])
+def agregar_presupuesto():
+    body = request.get_json()
+    tipo = body.get("tipo")           # "ingreso" o "gasto"
+    categoria = body.get("categoria")
+    descripcion = body.get("descripcion", "")
+    monto = float(body.get("monto"))
+
+    if not tipo or not categoria or not monto:
+        return jsonify({"error": "Faltan campos obligatorios"}), 400
+
+    agregar_movimiento(tipo, categoria, descripcion, monto)
+    return jsonify({"mensaje": "Movimiento agregado"})
+
+@app.route("/presupuesto/<int:id>", methods=["PUT"])
+def editar_presupuesto(id):
+    body = request.get_json()
+    tipo = body.get("tipo")
+    categoria = body.get("categoria")
+    descripcion = body.get("descripcion", "")
+    monto = float(body.get("monto"))
+
+    if not tipo or not categoria or not monto:
+        return jsonify({"error": "Faltan campos obligatorios"}), 400
+
+    filas = editar_movimiento(id, tipo, categoria, descripcion, monto)
+    if filas == 0:
+        return jsonify({"error": f"No existe el movimiento con id {id}"}), 404
+    return jsonify({"mensaje": f"Movimiento {id} actualizado"})
+
+@app.route("/presupuesto/<int:id>", methods=["DELETE"])
+def borrar_presupuesto(id):
+    filas = borrar_movimiento(id)
+    if filas == 0:
+        return jsonify({"error": f"No existe el movimiento con id {id}"}), 404
+    return jsonify({"mensaje": f"Movimiento {id} eliminado"})
 
 
 if __name__ == "__main__":
