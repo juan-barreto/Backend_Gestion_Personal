@@ -56,6 +56,12 @@ def inicio():
 @app.route("/dolar")
 def dolar():
     datos = obtener_todos()
+    # Renombramos "Bolsa" → "MEP" para que sea más conocido
+    for item in datos:
+        if item.get("nombre") == "Bolsa":
+            item["nombre"] = "MEP"
+        if item.get("casa") == "bolsa":
+            item["casa"] = "mep"
     return jsonify(datos)
 
 
