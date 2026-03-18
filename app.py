@@ -9,6 +9,7 @@ from services.calculos import calcular_ajuste
 from database import guardar_cotizacion, obtener_cotizacion_anterior, obtener_historial_cotizacion
 from datetime import datetime
 import requests as req_interno
+from services.asistente import consultar_asistente
 
 app = Flask(__name__)
 
@@ -63,6 +64,19 @@ def dolar():
         if item.get("casa") == "bolsa":
             item["casa"] = "mep"
     return jsonify(datos)
+
+#Asistente Groq porvisorio
+@app.route("/asistente", methods=["POST"])
+def asistente():
+    body = request.get_json()
+    mensaje = body.get("mensaje", "")
+    historial = body.get("historial", [])
+    
+    if not mensaje:
+        return jsonify({"error": "Mensaje vacío"}), 400
+    
+    respuesta = consultar_asistente(mensaje, historial)
+    return jsonify({"respuesta": respuesta})
 
 
 @app.route("/ipc")
