@@ -24,11 +24,8 @@ Podés ayudar con:
 
 def obtener_contexto_usuario(nombre: str) -> str:
     """
-    Busca en la DB los datos reales del usuario y construye
-    el bloque de contexto para inyectar en el system prompt.
-    
-    Equivalente en Python puro:
-    contexto = f"El usuario se llama {nombre} y su último alquiler fue..."
+    Construye el contexto completo del usuario para inyectar en el system prompt.
+    Usa todos los datos disponibles en la DB.
     """
     contexto = f"\n\nCONTEXTO DEL USUARIO '{nombre}':\n"
 
@@ -36,30 +33,45 @@ def obtener_contexto_usuario(nombre: str) -> str:
         conexion = sqlite3.connect("dolar.db")
         cursor = conexion.cursor()
 
-        # Último cálculo de alquiler
+        # — HISTORIAL DE ALQUILERES —
         cursor.execute("""
             SELECT alquiler_inicial, alquiler_final, fecha_inicio, 
                    fecha_calculo, tipo_indice
             FROM calculo_alquiler 
             ORDER BY fecha_calculo DESC 
-            LIMIT 1
+            LIMIT 5
         """)
-        alquiler = cursor.fetchone()
+        alquileres = cursor.fetchall()
 
-        if alquiler:
-            contexto += (
-                f"- Último alquiler calculado: inicial ${alquiler[0]:,.0f}, "
-                f"ajustado ${alquiler[1]:,.0f}\n"
-                f"- Índice usado: {alquiler[4].upper()}\n"
-                f"- Fecha de inicio del período: {alquiler[2]}\n"
-                f"- Calculado el: {alquiler[3][:10]}\n"
-            )
+        if alquileres:
+            contexto += "\nALQUILERES CALCULADOS (últimos 5):\n"
+            for a in alquileres:
+                # Calculamos variación porcentual
+                variacion = ((a[1] - a[0]) / a[0]) * 100
+                contexto += (
+                    f"  · Inicial: ${a[0]:,.0f} → Ajustado: ${a[1]:,.0f} "
+                    f"(+{variacion:.1f}%) | Índice: {a[4].upper()} | "
+                    f"Desde: {a[2]} | Calculado: {a[3][:10]}\n"
+                )
+
+            # Próximo ajuste estimado basado en el último
+            ultimo = alquileres[0]
+            try:
+                from datetime import datetime, timedelta
+                fecha_inicio = datetime.strptime(ultimo[2], "%Y-%m-%d")
+                proximo = fecha_inicio + timedelta(days=90)  # asume trimestral
+                hoy = datetime.now()
+                dias = (proximo - hoy).days
+                if dias > 0:
+                    contexto += f"  · Próximo ajuste estimado: en {dias} días ({proximo.strftime('%Y-%m-%d')})\n"
+                else:
+                    contexto += f"  · Próximo ajuste: vencido hace {abs(dias)} días\n"
+            except:
+                pass
         else:
-            contexto += "- No tiene cálculos de alquiler registrados todavía.\n"
+            contexto += "\nALQUILERES: Sin cálculos registrados todavía.\n"
 
-
-     # Últimas cotizaciones del dólar
-    # Últimas cotizaciones del dólar — una query por casa para mayor confiabilidad
+        # — COTIZACIONES DEL DÓLAR —
         casas = ['blue', 'oficial', 'mep']
         dolares = []
         for casa in casas:
@@ -75,17 +87,31 @@ def obtener_contexto_usuario(nombre: str) -> str:
                 dolares.append(resultado)
 
         if dolares:
-            contexto += "- Cotizaciones actuales del dólar:\n"
+            contexto += "\nCOTIZACIONES DEL DÓLAR (actuales):\n"
             for d in dolares:
                 contexto += f"  · {d[0].capitalize()}: compra ${d[2]:,.0f} / venta ${d[1]:,.0f}\n"
         else:
-            contexto += "- Sin cotizaciones del dólar en la base de datos todavía.\n"
+            contexto += "\nCOTIZACIONES: Sin datos todavía.\n"
+
+        # — IPC —
+        try:
+            import requests
+            url = "https://apis.datos.gob.ar/series/api/series/?ids=103.1_I2N_2016_M_15&limit=3&format=json"
+            respuesta = requests.get(url, timeout=5)
+            datos = respuesta.json()["data"]
+            if len(datos) >= 2:
+                ultimo_ipc = datos[-1]
+                penultimo_ipc = datos[-2]
+                variacion_ipc = ((ultimo_ipc[1] - penultimo_ipc[1]) / penultimo_ipc[1]) * 100
+                contexto += f"\nIPC (inflación mensual):\n"
+                contexto += f"  · Último disponible: {variacion_ipc:.1f}% ({ultimo_ipc[0][:7]})\n"
+        except:
+            contexto += "\nIPC: No disponible en este momento.\n"
 
         conexion.close()
 
     except Exception as e:
-        # Si falla la DB, Clara sigue funcionando sin contexto
-        contexto += f"- No se pudo cargar el contexto del usuario ({str(e)}).\n"
+        contexto += f"\nError cargando contexto: {str(e)}\n"
 
     return contexto
 
