@@ -13,15 +13,9 @@ from services.asistente import consultar_asistente
 
 app = Flask(__name__)
 
-# Paso 1 — contexto: crea las tablas al arrancar
-
-with app.app_context():
-    creacion_tabla()
-    creacion_tabla_alquiler()
-    actualizar_cotizaciones()
 
 
-# Paso 2 — funciones que va a ejecutar el scheduler
+# Paso 1 — funciones que va a ejecutar el scheduler(antes de context para que cargue al inicio)
 
 def actualizar_cotizaciones():
     """Actualiza y guarda las cotizaciones en la DB cada 30 minutos"""
@@ -40,6 +34,14 @@ def ping_propio():
         print("Ping enviado - servidor despierto")
     except Exception as e:
         print(f"Error en ping: {e}")
+
+# Paso 2 — contexto: crea las tablas al arrancar
+
+with app.app_context():
+    creacion_tabla()
+    creacion_tabla_alquiler()
+    actualizar_cotizaciones()
+
 
 # Paso 3 — crear y arrancar el scheduler
 
