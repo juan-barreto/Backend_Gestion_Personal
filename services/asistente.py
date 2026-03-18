@@ -57,16 +57,22 @@ def obtener_contexto_usuario(nombre: str) -> str:
         else:
             contexto += "- No tiene cálculos de alquiler registrados todavía.\n"
 
-        # Últimas cotizaciones del dólar
-        cursor.execute("""
-            SELECT fuente, venta, compra, fecha
-            FROM cotizaciones
-            WHERE fuente IN ('blue', 'oficial', 'mep')
-            GROUP BY fuente
-            HAVING fecha = MAX(fecha)
-            ORDER BY fecha DESC
-        """)
-        dolares = cursor.fetchall()
+
+     # Últimas cotizaciones del dólar
+    # Últimas cotizaciones del dólar — una query por casa para mayor confiabilidad
+        casas = ['blue', 'oficial', 'mep']
+        dolares = []
+        for casa in casas:
+            cursor.execute("""
+                SELECT fuente, venta, compra, fecha
+                FROM cotizaciones
+                WHERE fuente = ?
+                ORDER BY fecha DESC
+                LIMIT 1
+            """, (casa,))
+            resultado = cursor.fetchone()
+            if resultado:
+                dolares.append(resultado)
 
         if dolares:
             contexto += "- Cotizaciones actuales del dólar:\n"
@@ -82,6 +88,7 @@ def obtener_contexto_usuario(nombre: str) -> str:
         contexto += f"- No se pudo cargar el contexto del usuario ({str(e)}).\n"
 
     return contexto
+
 
 
 def construir_system_prompt(nombre: str) -> str:
