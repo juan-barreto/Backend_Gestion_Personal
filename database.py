@@ -130,6 +130,34 @@ def obtener_historial_alquiler():
         historial.append(new_fila)
     conexion.close()
     return historial
+
+def obtener_historial_cotizacion(fuente: str, limite: int = 30):
+    """Devuelve los últimos N registros de una casa para graficar"""
+    conexion = sqlite3.connect("dolar.db")
+    cursor = conexion.cursor()
+    
+    cursor.execute("""
+        SELECT venta, compra, fecha 
+        FROM cotizaciones 
+        WHERE fuente = ? 
+        ORDER BY fecha DESC 
+        LIMIT ?
+    """, (fuente, limite))
+    
+    resultados = cursor.fetchall()
+    conexion.close()
+    
+    # Invertimos para que el gráfico vaya de más viejo a más nuevo
+    resultados.reverse()
+    
+    return [
+        {
+            "venta": fila[0],
+            "compra": fila[1],
+            "fecha": fila[2]
+        }
+        for fila in resultados
+    ]
 #(id: int) anotacion que indica el tipo de valor esperado
 def borrar_calculo(id: int):
     """Borra un registro específico del historial por su id"""

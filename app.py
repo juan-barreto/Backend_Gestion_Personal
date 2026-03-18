@@ -6,7 +6,7 @@ from routes.ipc import obtener_ipc
 from routes.icl import obtener_icl
 from routes.ripte import obtener_ripte
 from services.calculos import calcular_ajuste
-from database import guardar_cotizacion, obtener_cotizacion_anterior
+from database import guardar_cotizacion, obtener_cotizacion_anterior, obtener_historial_cotizacion
 from datetime import datetime
 import requests as req_interno
 
@@ -80,6 +80,15 @@ def icl():
 def ripte():
     datos = obtener_ripte()
     return jsonify(datos)
+
+#Historial en reversa para grafico en app
+@app.route("/dolar/historial/<casa>")
+def historial_cotizacion(casa):
+    datos = obtener_historial_cotizacion(casa)
+    if not datos:
+        return jsonify({"error": "Sin historial"}), 404
+    return jsonify(datos)
+
 
 @app.route("/dolar/variacion/<casa>")
 def obtener_variacion_dolar(casa):
