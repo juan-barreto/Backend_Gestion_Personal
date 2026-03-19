@@ -71,6 +71,61 @@ def obtener_contexto_usuario(nombre: str) -> str:
         else:
             contexto += "\nALQUILERES: Sin cálculos registrados todavía.\n"
 
+        # — PRESUPUESTO DEL MES —
+        try:
+            cursor.execute("""
+                SELECT tipo, categoria, monto
+                FROM presupuesto
+                WHERE strftime('%Y-%m', fecha) = strftime('%Y-%m', 'now')
+            """)
+            movimientos = cursor.fetchall()
+
+            if movimientos:
+                # Calculamos totales
+                # Equivalente en Python:
+                # total_ingresos = sum(m[2] for m in movimientos if m[0] == 'ingreso')
+                total_ingresos = sum(m[2] for m in movimientos if m[0] == "ingreso")
+                total_gastos = sum(m[2] for m in movimientos if m[0] == "gasto")
+                balance = total_ingresos - total_gastos
+                cantidad = len(movimientos)
+
+                # Agrupamos gastos por categoría para el top 3
+                # Equivalente en Python:
+                # {cat: sum(m[2] for m in movimientos if m[1] == cat)}
+                por_categoria = {}
+                for m in movimientos:
+                    if m[0] == "gasto":
+                        cat = m[1]
+                        por_categoria[cat] = por_categoria.get(cat, 0) + m[2]
+
+                # Ordenamos de mayor a menor y tomamos los 3 primeros
+                top3 = sorted(por_categoria.items(), key=lambda x: x[1], reverse=True)[:3]
+
+                contexto += f"\nPRESUPUESTO DEL MES ACTUAL:\n"
+                contexto += f"  · Ingresos: ${total_ingresos:,.0f}\n"
+                contexto += f"  · Gastos: ${total_gastos:,.0f}\n"
+                contexto += f"  · Balance: {'+'if balance >= 0 else ''}${balance:,.0f}\n"
+                contexto += f"  · Movimientos registrados: {cantidad}\n"
+
+                if top3:
+                    contexto += f"  · Top categorías de gasto:\n"
+                    for cat, monto in top3:
+                        porcentaje = (monto / total_gastos * 100) if total_gastos > 0 else 0
+                        contexto += f"      - {cat}: ${monto:,.0f} ({porcentaje:.1f}%)\n"
+
+                # Estado del balance para que Clara pueda dar consejos contextualizados
+                if balance > 0:
+                    contexto += f"  · Estado: superávit — el usuario está ahorrando\n"
+                elif balance == 0:
+                    contexto += f"  · Estado: equilibrio — ingresos igualan gastos\n"
+                else:
+                    contexto += f"  · Estado: déficit — el usuario gasta más de lo que gana\n"
+            else:
+                contexto += "\nPRESUPUESTO: Sin movimientos registrados este mes.\n"
+
+        except Exception as e:
+            contexto += f"\nPRESUPUESTO: Error cargando datos ({str(e)})\n"
+        
         # — COTIZACIONES DEL DÓLAR —
         casas = ['blue', 'oficial', 'mep']
         dolares = []
