@@ -16,7 +16,12 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from io import BytesIO
 from datetime import datetime
-from fpdf import FPDF
+# ── COLORES PDF/EXCEL — definidos globalmente para usar en ambos endpoints ──
+VERDE        = (22, 163, 74)
+ROJO         = (220, 38, 38)
+VERDE_OSCURO = (20, 83, 45)
+GRIS_CLARO   = (243, 244, 246)
+BLANCO       = (255, 255, 255)
 
 app = Flask(__name__)
 
