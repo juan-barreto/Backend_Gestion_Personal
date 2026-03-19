@@ -384,22 +384,28 @@ def exportar_excel():
     )
 #-----------------------------------------------------------------------------------
 # Endpoint para exportacion de resumen y lista de movimientos en PDF
+# Endpoint para exportacion de resumen y lista de movimientos en PDF
 @app.route("/presupuesto/exportar/pdf")
 def exportar_pdf():
     from fpdf import FPDF
-    
+    import os
+
     filtro = request.args.get("filtro", "mensual")
     movimientos = obtener_movimientos(filtro)
 
-    # ── COLORES ──
-    VERDE = (22, 163, 74)
-    ROJO = (220, 38, 38)
-    GRIS_CLARO = (243, 244, 246)
-    BLANCO = (255, 255, 255)
-    VERDE_OSCURO = (20, 83, 45)
+    # Ruta a las fuentes — relativa al archivo app.py
+    # Equivalente en Python: Path(__file__).parent / "fonts"
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    fuente_regular = os.path.join(base_dir, "fonts", "DejaVuSans.ttf")
+    fuente_bold = os.path.join(base_dir, "fonts", "DejaVuSans-Bold.ttf")
 
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
+
+    # Cargamos la fuente con soporte Unicode completo
+    # sin esto, tildes y ñ tiran FPDFUnicodeEncodingException
+    pdf.add_font("DejaVu", style="", fname=fuente_regular)
+    pdf.add_font("DejaVu", style="B", fname=fuente_bold)
 
     # ══════════════════════════════════════════
     # PÁGINA 1 — DETALLE DE MOVIMIENTOS
@@ -409,11 +415,11 @@ def exportar_pdf():
     # — Encabezado —
     pdf.set_fill_color(*VERDE_OSCURO)
     pdf.rect(0, 0, 210, 30, 'F')
-    pdf.set_font("Helvetica", "B", 18)
+    pdf.set_font("DejaVu", "B", 18)
     pdf.set_text_color(*BLANCO)
     pdf.set_y(8)
     pdf.cell(0, 10, "Plata Clara", align="C", ln=True)
-    pdf.set_font("Helvetica", "", 10)
+    pdf.set_font("DejaVu", "", 10)
     pdf.cell(0, 6, f"Movimientos {filtro.capitalize()} — {datetime.now().strftime('%d/%m/%Y')}", align="C", ln=True)
 
     pdf.set_text_color(0, 0, 0)
@@ -424,7 +430,7 @@ def exportar_pdf():
     total_gastos = sum(m["monto"] for m in movimientos if m["tipo"] == "gasto")
     balance = total_ingresos - total_gastos
 
-    pdf.set_font("Helvetica", "B", 11)
+    pdf.set_font("DejaVu", "B", 11)
     pdf.set_fill_color(*GRIS_CLARO)
     pdf.cell(63, 10, f"Ingresos: ${total_ingresos:,.0f}", border=0, fill=True, align="C")
     pdf.cell(63, 10, f"Gastos: ${total_gastos:,.0f}", border=0, fill=True, align="C")
@@ -437,16 +443,16 @@ def exportar_pdf():
     # — Header de tabla —
     pdf.set_fill_color(*VERDE_OSCURO)
     pdf.set_text_color(*BLANCO)
-    pdf.set_font("Helvetica", "B", 9)
+    pdf.set_font("DejaVu", "B", 9)
     pdf.cell(30, 8, "Fecha", border=0, fill=True, align="C")
     pdf.cell(25, 8, "Tipo", border=0, fill=True, align="C")
-    pdf.cell(45, 8, "Categoría", border=0, fill=True, align="C")
-    pdf.cell(55, 8, "Descripción", border=0, fill=True, align="C")
+    pdf.cell(45, 8, "Categoria", border=0, fill=True, align="C")
+    pdf.cell(55, 8, "Descripcion", border=0, fill=True, align="C")
     pdf.cell(35, 8, "Monto", border=0, fill=True, align="C", ln=True)
     pdf.set_text_color(0, 0, 0)
 
     # — Filas de movimientos —
-    pdf.set_font("Helvetica", "", 8)
+    pdf.set_font("DejaVu", "", 8)
     for i, mov in enumerate(movimientos):
         es_ingreso = mov["tipo"] == "ingreso"
         # Filas alternadas — verde claro / rojo claro
@@ -465,7 +471,7 @@ def exportar_pdf():
         pdf.cell(25, 7, tipo, border=0, fill=True, align="C")
         pdf.cell(45, 7, categoria, border=0, fill=True, align="C")
         pdf.cell(55, 7, descripcion, border=0, fill=True, align="L")
-        
+
         # Monto en color según tipo
         pdf.set_text_color(*(VERDE if es_ingreso else ROJO))
         pdf.cell(35, 7, monto, border=0, fill=True, align="C", ln=True)
@@ -479,17 +485,17 @@ def exportar_pdf():
     # — Encabezado —
     pdf.set_fill_color(*VERDE_OSCURO)
     pdf.rect(0, 0, 210, 30, 'F')
-    pdf.set_font("Helvetica", "B", 18)
+    pdf.set_font("DejaVu", "B", 18)
     pdf.set_text_color(*BLANCO)
     pdf.set_y(8)
     pdf.cell(0, 10, "Plata Clara", align="C", ln=True)
-    pdf.set_font("Helvetica", "", 10)
-    pdf.cell(0, 6, f"Resumen por Categoría — {filtro.capitalize()}", align="C", ln=True)
+    pdf.set_font("DejaVu", "", 10)
+    pdf.cell(0, 6, f"Resumen por Categoria — {filtro.capitalize()}", align="C", ln=True)
     pdf.set_text_color(0, 0, 0)
     pdf.ln(8)
 
     # — Resumen general —
-    pdf.set_font("Helvetica", "B", 11)
+    pdf.set_font("DejaVu", "B", 11)
     pdf.set_fill_color(*GRIS_CLARO)
     pdf.cell(63, 10, f"Ingresos: ${total_ingresos:,.0f}", border=0, fill=True, align="C")
     pdf.cell(63, 10, f"Gastos: ${total_gastos:,.0f}", border=0, fill=True, align="C")
@@ -501,8 +507,8 @@ def exportar_pdf():
     # — Header tabla categorías —
     pdf.set_fill_color(*VERDE_OSCURO)
     pdf.set_text_color(*BLANCO)
-    pdf.set_font("Helvetica", "B", 10)
-    pdf.cell(90, 8, "Categoría", border=0, fill=True, align="C")
+    pdf.set_font("DejaVu", "B", 10)
+    pdf.cell(90, 8, "Categoria", border=0, fill=True, align="C")
     pdf.cell(50, 8, "Total gastado", border=0, fill=True, align="C")
     pdf.cell(50, 8, "% del gasto", border=0, fill=True, align="C", ln=True)
     pdf.set_text_color(0, 0, 0)
@@ -519,7 +525,7 @@ def exportar_pdf():
     # Ordenamos de mayor a menor gasto
     por_categoria_ordenado = sorted(por_categoria.items(), key=lambda x: x[1], reverse=True)
 
-    pdf.set_font("Helvetica", "", 10)
+    pdf.set_font("DejaVu", "", 10)
     for i, (cat, monto) in enumerate(por_categoria_ordenado):
         porcentaje = (monto / total_gastos * 100) if total_gastos > 0 else 0
         # Filas alternadas gris/blanco
@@ -533,7 +539,7 @@ def exportar_pdf():
 
     # — Pie de página —
     pdf.ln(10)
-    pdf.set_font("Helvetica", "I", 8)
+    pdf.set_font("DejaVu", "", 8)
     pdf.set_text_color(150, 150, 150)
     pdf.cell(0, 6, f"Generado por Plata Clara — CandleLabs — {datetime.now().strftime('%d/%m/%Y %H:%M')}", align="C")
 
@@ -550,7 +556,6 @@ def exportar_pdf():
         as_attachment=True,
         download_name=nombre_archivo
     )
-
 if __name__ == "__main__":
     creacion_tabla_alquiler()
     creacion_tabla()
