@@ -11,6 +11,11 @@ from database import creacion_tabla_presupuesto, agregar_movimiento, obtener_mov
 from datetime import datetime
 import requests as req_interno
 from services.asistente import consultar_asistente
+from flask import send_file
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from io import BytesIO
+from datetime import datetime
 
 app = Flask(__name__)
 
@@ -210,7 +215,172 @@ def borrar_presupuesto(id):
     if filas == 0:
         return jsonify({"error": f"No existe el movimiento con id {id}"}), 404
     return jsonify({"mensaje": f"Movimiento {id} eliminado"})
+#----------------------------------------------------------------------------------------------
+#endpoint logica excel para exportacion
+@app.route("/presupuesto/exportar/excel")
+def exportar_excel():
+    filtro = request.args.get("filtro", "mensual")
+    movimientos = obtener_movimientos(filtro)
 
+    wb = openpyxl.Workbook()
+
+    # ── COLORES ──
+    verde = "FF16A34A"
+    rojo = "FFDC2626"
+    verde_claro = "FFDCFCE7"
+    rojo_claro = "FFFEE2E2"
+    gris = "FFF3F4F6"
+    blanco = "FFFFFFFF"
+    header_font = Font(bold=True, color="FFFFFFFF", size=11)
+    border = Border(
+        left=Side(style='thin', color="FFE5E7EB"),
+        right=Side(style='thin', color="FFE5E7EB"),
+        top=Side(style='thin', color="FFE5E7EB"),
+        bottom=Side(style='thin', color="FFE5E7EB")
+    )
+
+    # ── HOJA 1 — MOVIMIENTOS ──
+    ws1 = wb.active
+    ws1.title = "Movimientos"
+
+    # Título
+    ws1.merge_cells("A1:E1")
+    titulo = ws1["A1"]
+    titulo.value = f"Plata Clara — Movimientos ({filtro.capitalize()})"
+    titulo.font = Font(bold=True, size=14, color="FF14532D")
+    titulo.alignment = Alignment(horizontal="center")
+    ws1.row_dimensions[1].height = 30
+
+    # Fecha de exportación
+    ws1.merge_cells("A2:E2")
+    fecha_export = ws1["A2"]
+    fecha_export.value = f"Exportado el {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+    fecha_export.font = Font(size=9, color="FF6B7280")
+    fecha_export.alignment = Alignment(horizontal="center")
+
+    # Headers
+    headers = ["Fecha", "Tipo", "Categoría", "Descripción", "Monto"]
+    for col, header in enumerate(headers, 1):
+        cell = ws1.cell(row=4, column=col, value=header)
+        cell.font = header_font
+        cell.fill = PatternFill("solid", fgColor="FF14532D")
+        cell.alignment = Alignment(horizontal="center")
+        cell.border = border
+
+    # Datos
+    total_ingresos = 0
+    total_gastos = 0
+    for row_idx, mov in enumerate(movimientos, 5):
+        es_ingreso = mov["tipo"] == "ingreso"
+        color_fila = verde_claro if es_ingreso else rojo_claro
+
+        fecha_cell = ws1.cell(row=row_idx, column=1, value=mov["fecha"][:10])
+        tipo_cell = ws1.cell(row=row_idx, column=2, value="Ingreso" if es_ingreso else "Gasto")
+        cat_cell = ws1.cell(row=row_idx, column=3, value=mov["categoria"])
+        desc_cell = ws1.cell(row=row_idx, column=4, value=mov.get("descripcion", ""))
+        monto_cell = ws1.cell(row=row_idx, column=5,
+            value=mov["monto"] if es_ingreso else -mov["monto"])
+
+        for cell in [fecha_cell, tipo_cell, cat_cell, desc_cell, monto_cell]:
+            cell.fill = PatternFill("solid", fgColor=color_fila)
+            cell.border = border
+            cell.alignment = Alignment(horizontal="center")
+
+        monto_cell.font = Font(
+            bold=True,
+            color=verde if es_ingreso else rojo
+        )
+        monto_cell.number_format = '#,##0.00'
+
+        if es_ingreso:
+            total_ingresos += mov["monto"]
+        else:
+            total_gastos += mov["monto"]
+
+    # Totales
+    fila_total = len(movimientos) + 5
+    ws1.cell(row=fila_total, column=4, value="Total Ingresos:").font = Font(bold=True)
+    ing_cell = ws1.cell(row=fila_total, column=5, value=total_ingresos)
+    ing_cell.font = Font(bold=True, color=verde)
+    ing_cell.number_format = '#,##0.00'
+
+    ws1.cell(row=fila_total+1, column=4, value="Total Gastos:").font = Font(bold=True)
+    gas_cell = ws1.cell(row=fila_total+1, column=5, value=-total_gastos)
+    gas_cell.font = Font(bold=True, color=rojo)
+    gas_cell.number_format = '#,##0.00'
+
+    balance = total_ingresos - total_gastos
+    ws1.cell(row=fila_total+2, column=4, value="Balance:").font = Font(bold=True, size=12)
+    bal_cell = ws1.cell(row=fila_total+2, column=5, value=balance)
+    bal_cell.font = Font(bold=True, size=12, color=verde if balance >= 0 else rojo)
+    bal_cell.number_format = '#,##0.00'
+
+    # Anchos de columna
+    ws1.column_dimensions["A"].width = 14
+    ws1.column_dimensions["B"].width = 12
+    ws1.column_dimensions["C"].width = 20
+    ws1.column_dimensions["D"].width = 25
+    ws1.column_dimensions["E"].width = 18
+
+    # ── HOJA 2 — RESUMEN POR CATEGORÍA ──
+    ws2 = wb.create_sheet("Por Categoría")
+
+    ws2.merge_cells("A1:C1")
+    titulo2 = ws2["A1"]
+    titulo2.value = "Resumen por Categoría"
+    titulo2.font = Font(bold=True, size=14, color="FF14532D")
+    titulo2.alignment = Alignment(horizontal="center")
+    ws2.row_dimensions[1].height = 30
+
+    for col, header in enumerate(["Categoría", "Total", "% del gasto"], 1):
+        cell = ws2.cell(row=3, column=col, value=header)
+        cell.font = header_font
+        cell.fill = PatternFill("solid", fgColor="FF14532D")
+        cell.alignment = Alignment(horizontal="center")
+        cell.border = border
+
+    # Agrupar por categoría
+    por_categoria = {}
+    for mov in movimientos:
+        if mov["tipo"] == "gasto":
+            cat = mov["categoria"]
+            por_categoria[cat] = por_categoria.get(cat, 0) + mov["monto"]
+
+    por_categoria_ordenado = sorted(por_categoria.items(), key=lambda x: x[1], reverse=True)
+
+    for row_idx, (cat, monto) in enumerate(por_categoria_ordenado, 4):
+        porcentaje = (monto / total_gastos * 100) if total_gastos > 0 else 0
+        color_fila = gris if row_idx % 2 == 0 else blanco
+
+        cat_cell = ws2.cell(row=row_idx, column=1, value=cat)
+        monto_cell = ws2.cell(row=row_idx, column=2, value=monto)
+        pct_cell = ws2.cell(row=row_idx, column=3, value=f"{porcentaje:.1f}%")
+
+        for cell in [cat_cell, monto_cell, pct_cell]:
+            cell.fill = PatternFill("solid", fgColor=color_fila)
+            cell.border = border
+            cell.alignment = Alignment(horizontal="center")
+
+        monto_cell.number_format = '#,##0.00'
+        monto_cell.font = Font(color=rojo)
+
+    ws2.column_dimensions["A"].width = 22
+    ws2.column_dimensions["B"].width = 18
+    ws2.column_dimensions["C"].width = 14
+
+    # Guardar en memoria y devolver
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    nombre_archivo = f"PlataClara_{filtro}_{datetime.now().strftime('%Y%m%d')}.xlsx"
+
+    return send_file(
+        output,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name=nombre_archivo
+    )
 
 if __name__ == "__main__":
     creacion_tabla_alquiler()
