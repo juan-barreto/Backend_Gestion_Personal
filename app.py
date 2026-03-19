@@ -112,10 +112,14 @@ def ripte():
     datos = obtener_ripte()
     return jsonify(datos)
 
-#Historial en reversa para grafico en app
+# Historial en reversa para grafico en app
 @app.route("/dolar/historial/<casa>")
 def historial_cotizacion(casa):
-    datos = obtener_historial_cotizacion(casa)
+    # El MEP se guarda en DB como "bolsa" — traducimos antes de buscar
+    # Equivalente en Python: casa = "bolsa" if casa == "mep" else casa
+    casa_db = "bolsa" if casa == "mep" else casa
+
+    datos = obtener_historial_cotizacion(casa_db)
     if not datos:
         return jsonify({"error": "Sin historial"}), 404
     return jsonify(datos)
@@ -123,27 +127,27 @@ def historial_cotizacion(casa):
 
 @app.route("/dolar/variacion/<casa>")
 def obtener_variacion_dolar(casa):
-    """Devuelve el valor actual vs anterior para calcular la flecha"""
-    datos = obtener_cotizacion_anterior(casa)
-    
+    # El MEP se guarda en DB como "bolsa" — traducimos antes de buscar
+    casa_db = "bolsa" if casa == "mep" else casa
+
+    datos = obtener_cotizacion_anterior(casa_db)
+
     if datos is None:
         return jsonify({"error": "Sin historial suficiente"}), 404
-    
-    # Calculamos la variación porcentual
-    # ((actual - anterior) / anterior) * 100
-    variacion_venta = ((datos["actual"]["venta"] - datos["anterior"]["venta"]) 
+
+    variacion_venta = ((datos["actual"]["venta"] - datos["anterior"]["venta"])
                        / datos["anterior"]["venta"]) * 100
-    
+
     return jsonify({
-    "casa": casa,
-    "venta_actual": datos["actual"]["venta"],
-    "venta_anterior": datos["anterior"]["venta"],
-    "compra_actual": datos["actual"]["compra"],      # nueva
-    "compra_anterior": datos["anterior"]["compra"],  # nueva
-    "variacion_porcentual": round(variacion_venta, 2),
-    "fecha_actual": datos["actual"]["fecha"],
-    "fecha_anterior": datos["anterior"]["fecha"]
-})
+        "casa": casa,  # devolvemos "mep", no "bolsa"
+        "venta_actual": datos["actual"]["venta"],
+        "venta_anterior": datos["anterior"]["venta"],
+        "compra_actual": datos["actual"]["compra"],
+        "compra_anterior": datos["anterior"]["compra"],
+        "variacion_porcentual": round(variacion_venta, 2),
+        "fecha_actual": datos["actual"]["fecha"],
+        "fecha_anterior": datos["anterior"]["fecha"]
+    })
 
 @app.route("/calcular-ajuste", methods=["POST"])
 def calcular_ajuste_endpoint():
