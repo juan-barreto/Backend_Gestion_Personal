@@ -16,6 +16,7 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from io import BytesIO
 from datetime import datetime
+from fpdf import FPDF
 
 app = Flask(__name__)
 
@@ -378,6 +379,174 @@ def exportar_excel():
     return send_file(
         output,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name=nombre_archivo
+    )
+#-----------------------------------------------------------------------------------
+# Endpoint para exportacion de resumen y lista de movimientos en PDF
+@app.route("/presupuesto/exportar/pdf")
+def exportar_pdf():
+    from fpdf import FPDF
+    
+    filtro = request.args.get("filtro", "mensual")
+    movimientos = obtener_movimientos(filtro)
+
+    # ── COLORES ──
+    VERDE = (22, 163, 74)
+    ROJO = (220, 38, 38)
+    GRIS_CLARO = (243, 244, 246)
+    BLANCO = (255, 255, 255)
+    VERDE_OSCURO = (20, 83, 45)
+
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+
+    # ══════════════════════════════════════════
+    # PÁGINA 1 — DETALLE DE MOVIMIENTOS
+    # ══════════════════════════════════════════
+    pdf.add_page()
+
+    # — Encabezado —
+    pdf.set_fill_color(*VERDE_OSCURO)
+    pdf.rect(0, 0, 210, 30, 'F')
+    pdf.set_font("Helvetica", "B", 18)
+    pdf.set_text_color(*BLANCO)
+    pdf.set_y(8)
+    pdf.cell(0, 10, "Plata Clara", align="C", ln=True)
+    pdf.set_font("Helvetica", "", 10)
+    pdf.cell(0, 6, f"Movimientos {filtro.capitalize()} — {datetime.now().strftime('%d/%m/%Y')}", align="C", ln=True)
+
+    pdf.set_text_color(0, 0, 0)
+    pdf.ln(8)
+
+    # — Totales rápidos —
+    total_ingresos = sum(m["monto"] for m in movimientos if m["tipo"] == "ingreso")
+    total_gastos = sum(m["monto"] for m in movimientos if m["tipo"] == "gasto")
+    balance = total_ingresos - total_gastos
+
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.set_fill_color(*GRIS_CLARO)
+    pdf.cell(63, 10, f"Ingresos: ${total_ingresos:,.0f}", border=0, fill=True, align="C")
+    pdf.cell(63, 10, f"Gastos: ${total_gastos:,.0f}", border=0, fill=True, align="C")
+    color_balance = VERDE if balance >= 0 else ROJO
+    pdf.set_text_color(*color_balance)
+    pdf.cell(63, 10, f"Balance: ${balance:,.0f}", border=0, fill=True, align="C", ln=True)
+    pdf.set_text_color(0, 0, 0)
+    pdf.ln(6)
+
+    # — Header de tabla —
+    pdf.set_fill_color(*VERDE_OSCURO)
+    pdf.set_text_color(*BLANCO)
+    pdf.set_font("Helvetica", "B", 9)
+    pdf.cell(30, 8, "Fecha", border=0, fill=True, align="C")
+    pdf.cell(25, 8, "Tipo", border=0, fill=True, align="C")
+    pdf.cell(45, 8, "Categoría", border=0, fill=True, align="C")
+    pdf.cell(55, 8, "Descripción", border=0, fill=True, align="C")
+    pdf.cell(35, 8, "Monto", border=0, fill=True, align="C", ln=True)
+    pdf.set_text_color(0, 0, 0)
+
+    # — Filas de movimientos —
+    pdf.set_font("Helvetica", "", 8)
+    for i, mov in enumerate(movimientos):
+        es_ingreso = mov["tipo"] == "ingreso"
+        # Filas alternadas — verde claro / rojo claro
+        if es_ingreso:
+            pdf.set_fill_color(220, 252, 231)  # verde muy claro
+        else:
+            pdf.set_fill_color(254, 226, 226)  # rojo muy claro
+
+        fecha = mov["fecha"][:10]
+        tipo = "Ingreso" if es_ingreso else "Gasto"
+        categoria = mov["categoria"][:20]  # cortamos si es muy largo
+        descripcion = (mov.get("descripcion") or "")[:25]
+        monto = f"${mov['monto']:,.0f}"
+
+        pdf.cell(30, 7, fecha, border=0, fill=True, align="C")
+        pdf.cell(25, 7, tipo, border=0, fill=True, align="C")
+        pdf.cell(45, 7, categoria, border=0, fill=True, align="C")
+        pdf.cell(55, 7, descripcion, border=0, fill=True, align="L")
+        
+        # Monto en color según tipo
+        pdf.set_text_color(*(VERDE if es_ingreso else ROJO))
+        pdf.cell(35, 7, monto, border=0, fill=True, align="C", ln=True)
+        pdf.set_text_color(0, 0, 0)
+
+    # ══════════════════════════════════════════
+    # PÁGINA 2 — RESUMEN POR CATEGORÍA
+    # ══════════════════════════════════════════
+    pdf.add_page()
+
+    # — Encabezado —
+    pdf.set_fill_color(*VERDE_OSCURO)
+    pdf.rect(0, 0, 210, 30, 'F')
+    pdf.set_font("Helvetica", "B", 18)
+    pdf.set_text_color(*BLANCO)
+    pdf.set_y(8)
+    pdf.cell(0, 10, "Plata Clara", align="C", ln=True)
+    pdf.set_font("Helvetica", "", 10)
+    pdf.cell(0, 6, f"Resumen por Categoría — {filtro.capitalize()}", align="C", ln=True)
+    pdf.set_text_color(0, 0, 0)
+    pdf.ln(8)
+
+    # — Resumen general —
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.set_fill_color(*GRIS_CLARO)
+    pdf.cell(63, 10, f"Ingresos: ${total_ingresos:,.0f}", border=0, fill=True, align="C")
+    pdf.cell(63, 10, f"Gastos: ${total_gastos:,.0f}", border=0, fill=True, align="C")
+    pdf.set_text_color(*color_balance)
+    pdf.cell(63, 10, f"Balance: ${balance:,.0f}", border=0, fill=True, align="C", ln=True)
+    pdf.set_text_color(0, 0, 0)
+    pdf.ln(6)
+
+    # — Header tabla categorías —
+    pdf.set_fill_color(*VERDE_OSCURO)
+    pdf.set_text_color(*BLANCO)
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.cell(90, 8, "Categoría", border=0, fill=True, align="C")
+    pdf.cell(50, 8, "Total gastado", border=0, fill=True, align="C")
+    pdf.cell(50, 8, "% del gasto", border=0, fill=True, align="C", ln=True)
+    pdf.set_text_color(0, 0, 0)
+
+    # — Agrupar gastos por categoría —
+    # Equivalente en Python:
+    # {cat: sum(m['monto'] for m in movimientos if m['categoria'] == cat}
+    por_categoria = {}
+    for mov in movimientos:
+        if mov["tipo"] == "gasto":
+            cat = mov["categoria"]
+            por_categoria[cat] = por_categoria.get(cat, 0) + mov["monto"]
+
+    # Ordenamos de mayor a menor gasto
+    por_categoria_ordenado = sorted(por_categoria.items(), key=lambda x: x[1], reverse=True)
+
+    pdf.set_font("Helvetica", "", 10)
+    for i, (cat, monto) in enumerate(por_categoria_ordenado):
+        porcentaje = (monto / total_gastos * 100) if total_gastos > 0 else 0
+        # Filas alternadas gris/blanco
+        fill_color = GRIS_CLARO if i % 2 == 0 else BLANCO
+        pdf.set_fill_color(*fill_color)
+        pdf.cell(90, 8, cat, border=0, fill=True, align="C")
+        pdf.set_text_color(*ROJO)
+        pdf.cell(50, 8, f"${monto:,.0f}", border=0, fill=True, align="C")
+        pdf.set_text_color(0, 0, 0)
+        pdf.cell(50, 8, f"{porcentaje:.1f}%", border=0, fill=True, align="C", ln=True)
+
+    # — Pie de página —
+    pdf.ln(10)
+    pdf.set_font("Helvetica", "I", 8)
+    pdf.set_text_color(150, 150, 150)
+    pdf.cell(0, 6, f"Generado por Plata Clara — CandleLabs — {datetime.now().strftime('%d/%m/%Y %H:%M')}", align="C")
+
+    # — Guardar en memoria y devolver —
+    output = BytesIO()
+    pdf.output(output)
+    output.seek(0)
+
+    nombre_archivo = f"PlataClara_{filtro}_{datetime.now().strftime('%Y%m%d')}.pdf"
+
+    return send_file(
+        output,
+        mimetype="application/pdf",
         as_attachment=True,
         download_name=nombre_archivo
     )
