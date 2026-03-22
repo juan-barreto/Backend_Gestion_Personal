@@ -225,6 +225,15 @@ def borrar_presupuesto(id):
     if filas == 0:
         return jsonify({"error": f"No existe el movimiento con id {id}"}), 404
     return jsonify({"mensaje": f"Movimiento {id} eliminado"})
+
+@app.route("/presupuesto/reset", methods=["DELETE"])
+def reset_presupuesto():
+    conexion = sqlite3.connect("dolar.db")
+    cursor = conexion.cursor()
+    cursor.execute("DELETE FROM presupuesto")
+    conexion.commit()
+    conexion.close()
+    return jsonify({"mensaje": "Todos los movimientos fueron eliminados"})
 #----------------------------------------------------------------------------------------------
 #endpoint logica excel para exportacion
 @app.route("/presupuesto/exportar/excel")
