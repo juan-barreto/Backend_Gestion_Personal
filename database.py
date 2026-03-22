@@ -86,7 +86,13 @@ def guardar_cotizacion(fuente,venta,compra):
 
     conexion.commit()
     conexion.close()
-
+def reset_presupuesto():
+    conexion = sqlite3.connect("dolar.db")
+    cursor = conexion.cursor()
+    cursor.execute("DELETE FROM presupuesto")
+    conexion.commit()
+    conexion.close()
+    
 def obtener_cotizacion_anterior(fuente: str):
     """Devuelve las últimas DOS cotizaciones de una casa para calcular variación"""
     conexion = sqlite3.connect("dolar.db")

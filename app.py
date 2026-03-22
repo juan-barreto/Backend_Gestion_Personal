@@ -6,7 +6,7 @@ from routes.ipc import obtener_ipc
 from routes.icl import obtener_icl
 from routes.ripte import obtener_ripte
 from services.calculos import calcular_ajuste
-from database import guardar_cotizacion, obtener_cotizacion_anterior, obtener_historial_cotizacion
+from database import guardar_cotizacion, obtener_cotizacion_anterior, obtener_historial_cotizacion, reset_presupuesto
 from database import creacion_tabla_presupuesto, agregar_movimiento, obtener_movimientos, editar_movimiento,borrar_movimiento
 from datetime import datetime
 import requests as req_interno
@@ -227,12 +227,8 @@ def borrar_presupuesto(id):
     return jsonify({"mensaje": f"Movimiento {id} eliminado"})
 
 @app.route("/presupuesto/reset", methods=["DELETE"])
-def reset_presupuesto():
-    conexion = sqlite3.connect("dolar.db")
-    cursor = conexion.cursor()
-    cursor.execute("DELETE FROM presupuesto")
-    conexion.commit()
-    conexion.close()
+def reset_presupuesto_endpoint():
+    reset_presupuesto()
     return jsonify({"mensaje": "Todos los movimientos fueron eliminados"})
 #----------------------------------------------------------------------------------------------
 #endpoint logica excel para exportacion
