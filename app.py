@@ -1,22 +1,40 @@
 from flask import Flask, jsonify, request
 from apscheduler.schedulers.background import BackgroundScheduler
-from database import creacion_tabla, creacion_tabla_alquiler,guardar_ajuste,obtener_historial_alquiler,borrar_calculo, borrar_historial_completo
+from datetime import datetime, timedelta # Agregamos timedelta para filtros de fecha
+
+# --- Importaciones de Database (Migradas a Supabase) ---
+# Importamos directamente las funciones necesarias, no las de creacion_tabla que ya no son activas.
+from database import (
+    creacion_tabla, creacion_tabla_alquiler, creacion_tabla_presupuesto, # Placeholders, no hacen nada
+    guardar_ajuste, obtener_historial_alquiler, borrar_calculo, borrar_historial_completo,
+    guardar_cotizacion, obtener_cotizacion_anterior, obtener_historial_cotizacion,
+    agregar_movimiento, obtener_movimientos, editar_movimiento, borrar_movimiento, reset_presupuesto
+)
+
+# --- Importaciones de Rutas Externas (no necesitan user_id por ahora) ---
 from routes.dolar import obtener_todos
 from routes.ipc import obtener_ipc
 from routes.icl import obtener_icl
 from routes.ripte import obtener_ripte
+
+# --- Importaciones de Servicios ---
 from services.calculos import calcular_ajuste
-from database import guardar_cotizacion, obtener_cotizacion_anterior, obtener_historial_cotizacion, reset_presupuesto
-from database import creacion_tabla_presupuesto, agregar_movimiento, obtener_movimientos, editar_movimiento,borrar_movimiento
-from datetime import datetime
-import requests as req_interno
 from services.asistente import consultar_asistente
+
+# --- Importación del decorador de Autenticación ---
+from auth import token_required
+
+# --- Importaciones para exportación ---
+import requests as req_interno
 from flask import send_file
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from io import BytesIO
-from datetime import datetime
-# ── COLORES PDF/EXCEL — definidos globalmente para usar en ambos endpoints ──
+import os # Para la ruta de las fuentes del PDF
+from fpdf import FPDF # Asegúrate de tener fpdf instalado: pip install fpdf2
+
+
+# ── COLORES PDF/EXCEL — definidos globalmente ──
 VERDE        = (22, 163, 74)
 ROJO         = (220, 38, 38)
 VERDE_OSCURO = (20, 83, 45)
@@ -26,54 +44,52 @@ BLANCO       = (255, 255, 255)
 app = Flask(__name__)
 
 
-
-# Paso 1 — funciones que va a ejecutar el scheduler(antes de context para que cargue al inicio)
-
+# --- Funciones de Scheduler ---
 def actualizar_cotizaciones():
-    """Actualiza y guarda las cotizaciones en la DB cada 30 minutos"""
+    """Actualiza y guarda las cotizaciones globales en la DB cada 30 minutos"""
     try:
         datos = obtener_todos()
         for dolar in datos:
-            guardar_cotizacion(dolar["casa"],dolar["venta"],dolar["compra"])
-        print("Cotizaciones actualizadas")
+            # guardar_cotizacion no necesita user_id
+            guardar_cotizacion(dolar["casa"], dolar["venta"], dolar["compra"])
+        print("Cotizaciones actualizadas en Supabase.")
     except Exception as e:
         print(f"Error actualizando cotizaciones: {e}")
 
 def ping_propio():
     """Mantiene Railway despierto cada 14 minutos"""
     try:
-        req_interno.get("https://web-production-f82cf.up.railway.app/")
-        print("Ping enviado - servidor despierto")
+        # Asegúrate de que esta URL sea la de tu backend desplegado
+        req_interno.get(os.getenv("RAILWAY_APP_URL", "http://localhost:5000"))
+        print("Ping enviado - servidor despierto.")
     except Exception as e:
         print(f"Error en ping: {e}")
 
-# Paso 2 — contexto: crea las tablas al arrancar
-
+# --- Contexto de la App (para inicialización) ---
 with app.app_context():
+    # Las funciones de creacion_tabla ahora son placeholders y no hacen nada.
+    # La creación real es manual en el SQL Editor de Supabase.
     creacion_tabla()
     creacion_tabla_alquiler()
     creacion_tabla_presupuesto()
-    actualizar_cotizaciones()
+    actualizar_cotizaciones() # Todavía útil para cargar cotizaciones al inicio
 
-
-# Paso 3 — crear y arrancar el scheduler
-
+# --- Scheduler ---
 scheduler = BackgroundScheduler()
 scheduler.add_job(actualizar_cotizaciones, 'interval', minutes=30)
-scheduler.add_job(ping_propio, 'interval', minutes= 14)
+scheduler.add_job(ping_propio, 'interval', minutes=14)
 scheduler.start()
 
-# Paso 4 — los endpoints 
+
+# --- Endpoints ---
 
 @app.route("/")
 def inicio():
-    return jsonify({"mensaje": "API funcionando"})
-
+    return jsonify({"mensaje": "API funcionando con Supabase!"})
 
 @app.route("/dolar")
 def dolar():
     datos = obtener_todos()
-    # Renombramos "Bolsa" → "MEP" para que sea más conocido
     for item in datos:
         if item.get("nombre") == "Bolsa":
             item["nombre"] = "MEP"
@@ -81,13 +97,12 @@ def dolar():
             item["casa"] = "mep"
     return jsonify(datos)
 
-#Asistente Groq porvisorio
 @app.route("/asistente", methods=["POST"])
 def asistente():
     body = request.get_json()
     mensaje = body.get("mensaje", "")
     historial = body.get("historial", [])
-    nombre = body.get("nombre", "Usuario")  # nuevo campo
+    nombre = body.get("nombre", "Usuario")
 
     if not mensaje:
         return jsonify({"error": "Mensaje vacío"}), 400
@@ -95,12 +110,10 @@ def asistente():
     respuesta = consultar_asistente(mensaje, historial, nombre)
     return jsonify({"respuesta": respuesta})
 
-
 @app.route("/ipc")
 def ipc():
     datos = obtener_ipc()
     return jsonify(datos)
-
 
 @app.route("/icl")
 def icl():
@@ -112,24 +125,19 @@ def ripte():
     datos = obtener_ripte()
     return jsonify(datos)
 
-# Historial en reversa para grafico en app
 @app.route("/dolar/historial/<casa>")
 def historial_cotizacion(casa):
-    # El MEP se guarda en DB como "bolsa" — traducimos antes de buscar
-    # Equivalente en Python: casa = "bolsa" if casa == "mep" else casa
     casa_db = "bolsa" if casa == "mep" else casa
-
+    # obtener_historial_cotizacion no necesita user_id
     datos = obtener_historial_cotizacion(casa_db)
     if not datos:
         return jsonify({"error": "Sin historial"}), 404
     return jsonify(datos)
 
-
 @app.route("/dolar/variacion/<casa>")
 def obtener_variacion_dolar(casa):
-    # El MEP se guarda en DB como "bolsa" — traducimos antes de buscar
     casa_db = "bolsa" if casa == "mep" else casa
-
+    # obtener_cotizacion_anterior no necesita user_id
     datos = obtener_cotizacion_anterior(casa_db)
 
     if datos is None:
@@ -139,7 +147,7 @@ def obtener_variacion_dolar(casa):
                        / datos["anterior"]["venta"]) * 100
 
     return jsonify({
-        "casa": casa,  # devolvemos "mep", no "bolsa"
+        "casa": casa,
         "venta_actual": datos["actual"]["venta"],
         "venta_anterior": datos["anterior"]["venta"],
         "compra_actual": datos["actual"]["compra"],
@@ -149,62 +157,58 @@ def obtener_variacion_dolar(casa):
         "fecha_anterior": datos["anterior"]["fecha"]
     })
 
+# --- Endpoints de Cálculo de Ajuste de Alquiler (Requieren user_id) ---
 @app.route("/calcular-ajuste", methods=["POST"])
-def calcular_ajuste_endpoint():
+@token_required
+def calcular_ajuste_endpoint(user_id): # Recibe user_id del decorador
     body = request.get_json()
     alquiler = float(body["alquiler"])
     fecha_inicio = body["fecha_inicio"]
-    fecha_firma = body["fecha_firma"]        # ← nuevo
-    periodo = int(body["periodo"])           # ← nuevo, llega como número
+    fecha_firma = body["fecha_firma"]
+    periodo = int(body["periodo"])
     fecha_calculo = datetime.now().isoformat()
     indice = body.get("indice", "ipc")
     resultado = calcular_ajuste(alquiler, fecha_inicio, indice, fecha_firma, periodo)
-    guardar_ajuste(alquiler, resultado["historial"][-1]["alquiler"], fecha_inicio, fecha_calculo, indice)
+    
+    # guardar_ajuste ahora requiere user_id
+    guardar_ajuste(user_id, alquiler, resultado["historial"][-1]["alquiler"], fecha_inicio, fecha_calculo, indice)
     return jsonify(resultado)
 
 @app.route("/historial")
-def obtener_historial():
-    historial = obtener_historial_alquiler()
+@token_required
+def obtener_historial(user_id): # Recibe user_id
+    # obtener_historial_alquiler ahora requiere user_id
+    historial = obtener_historial_alquiler(user_id)
     return jsonify(historial)
-#<int:id> toma el id de la URL y lo convierte en entero, no es una indicacion simplemente
-@app.route("/historial/<int:id>", methods=["DELETE"])
-def eliminar_calculo(id):
-    filas = borrar_calculo(id)
+
+@app.route("/historial/<id_str>", methods=["DELETE"]) # Cambiamos a <id_str> para manejar UUIDs como string
+@token_required
+def eliminar_calculo(user_id, id_str): # Recibe user_id y el ID como string
+    # borrar_calculo ahora requiere user_id y el ID es string
+    filas = borrar_calculo(user_id, id_str)
     if filas == 0:
-            return jsonify({"error": f"No existe el calculo con id {id}"}), 404
-    return jsonify({"mensaje": f"Cálculo {id} eliminado"})
+        return jsonify({"error": f"No existe el calculo con id {id_str} para este usuario"}), 404
+    return jsonify({"mensaje": f"Cálculo {id_str} eliminado"})
 
-@app.route("/historial", methods=["DELETE"])
-def eliminar_historial():
-    borrar_historial_completo()
-    return jsonify({"mensaje": "Historial eliminado"})
+@app.route("/historial/completo", methods=["DELETE"]) # Cambiamos la ruta para evitar conflicto con /historial
+@token_required
+def eliminar_historial_completo_endpoint(user_id): # Recibe user_id
+    # borrar_historial_completo ahora requiere user_id
+    borrar_historial_completo(user_id)
+    return jsonify({"mensaje": "Historial de cálculos eliminado"})
 
-#--------------------------------------------------------------------------------------
-#Endpoints presupuesto
-
+# --- Endpoints de Presupuesto (Requieren user_id) ---
 @app.route("/presupuesto")
-def obtener_presupuesto():
-    # ?filtro=semanal / mensual / anual
+@token_required
+def obtener_presupuesto(user_id): # Recibe user_id
     filtro = request.args.get("filtro", "mensual")
-    movimientos = obtener_movimientos(filtro)
+    # obtener_movimientos ahora requiere user_id
+    movimientos = obtener_movimientos(user_id, filtro)
     return jsonify(movimientos)
 
 @app.route("/presupuesto", methods=["POST"])
-def agregar_presupuesto():
-    body = request.get_json()
-    tipo = body.get("tipo")           # "ingreso" o "gasto"
-    categoria = body.get("categoria")
-    descripcion = body.get("descripcion", "")
-    monto = float(body.get("monto"))
-
-    if not tipo or not categoria or not monto:
-        return jsonify({"error": "Faltan campos obligatorios"}), 400
-
-    agregar_movimiento(tipo, categoria, descripcion, monto)
-    return jsonify({"mensaje": "Movimiento agregado"})
-
-@app.route("/presupuesto/<int:id>", methods=["PUT"])
-def editar_presupuesto(id):
+@token_required
+def agregar_presupuesto(user_id): # Recibe user_id
     body = request.get_json()
     tipo = body.get("tipo")
     categoria = body.get("categoria")
@@ -214,32 +218,56 @@ def editar_presupuesto(id):
     if not tipo or not categoria or not monto:
         return jsonify({"error": "Faltan campos obligatorios"}), 400
 
-    filas = editar_movimiento(id, tipo, categoria, descripcion, monto)
-    if filas == 0:
-        return jsonify({"error": f"No existe el movimiento con id {id}"}), 404
-    return jsonify({"mensaje": f"Movimiento {id} actualizado"})
+    # agregar_movimiento ahora requiere user_id
+    resultado = agregar_movimiento(user_id, tipo, categoria, descripcion, monto)
+    return jsonify(resultado), 201 # Retornamos el resultado de la inserción, incluyendo el ID
 
-@app.route("/presupuesto/<int:id>", methods=["DELETE"])
-def borrar_presupuesto(id):
-    filas = borrar_movimiento(id)
-    if filas == 0:
-        return jsonify({"error": f"No existe el movimiento con id {id}"}), 404
-    return jsonify({"mensaje": f"Movimiento {id} eliminado"})
+@app.route("/presupuesto/<id_str>", methods=["PUT"]) # Cambiamos a <id_str>
+@token_required
+def editar_presupuesto(user_id, id_str): # Recibe user_id y el ID como string
+    body = request.get_json()
+    tipo = body.get("tipo")
+    categoria = body.get("categoria")
+    descripcion = body.get("descripcion", "")
+    monto = float(body.get("monto"))
+
+    if not tipo or not categoria or not monto:
+        return jsonify({"error": "Faltan campos obligatorios"}), 400
+
+    # editar_movimiento ahora requiere user_id y el ID es string
+    filas = editar_movimiento(user_id, id_str, tipo, categoria, descripcion, monto)
+    if not filas.data: # Supabase devuelve data=[] si no hay filas afectadas
+        return jsonify({"error": f"No existe el movimiento con id {id_str} para este usuario"}), 404
+    return jsonify({"mensaje": f"Movimiento {id_str} actualizado"}), 200 # Devuelve 200 OK
+
+@app.route("/presupuesto/<id_str>", methods=["DELETE"]) # Cambiamos a <id_str>
+@token_required
+def borrar_presupuesto(user_id, id_str): # Recibe user_id y el ID como string
+    # borrar_movimiento ahora requiere user_id y el ID es string
+    filas_afectadas = borrar_movimiento(user_id, id_str)
+    if filas_afectadas == 0:
+        return jsonify({"error": f"No existe el movimiento con id {id_str} para este usuario"}), 404
+    return jsonify({"mensaje": f"Movimiento {id_str} eliminado"}), 200
 
 @app.route("/presupuesto/reset", methods=["DELETE"])
-def reset_presupuesto_endpoint():
-    reset_presupuesto()
-    return jsonify({"mensaje": "Todos los movimientos fueron eliminados"})
-#----------------------------------------------------------------------------------------------
-#endpoint logica excel para exportacion
+@token_required
+def reset_presupuesto_endpoint(user_id): # Recibe user_id
+    # reset_presupuesto ahora requiere user_id
+    reset_presupuesto(user_id)
+    return jsonify({"mensaje": "Todos los movimientos fueron eliminados para este usuario"}), 200
+
+# --- Endpoints de Exportación (Requieren user_id) ---
 @app.route("/presupuesto/exportar/excel")
-def exportar_excel():
+@token_required
+def exportar_excel(user_id): # Recibe user_id
     filtro = request.args.get("filtro", "mensual")
-    movimientos = obtener_movimientos(filtro)
+    # obtener_movimientos ahora requiere user_id
+    movimientos = obtener_movimientos(user_id, filtro)
 
     wb = openpyxl.Workbook()
 
-    # ── COLORES ──
+    # --- COLORES ---
+    # Colores ya definidos en la función original, los mantenemos
     verde = "FF16A34A"
     rojo = "FFDC2626"
     verde_claro = "FFDCFCE7"
@@ -254,7 +282,7 @@ def exportar_excel():
         bottom=Side(style='thin', color="FFE5E7EB")
     )
 
-    # ── HOJA 1 — MOVIMIENTOS ──
+    # --- HOJA 1 — MOVIMIENTOS ---
     ws1 = wb.active
     ws1.title = "Movimientos"
 
@@ -337,7 +365,7 @@ def exportar_excel():
     ws1.column_dimensions["D"].width = 25
     ws1.column_dimensions["E"].width = 18
 
-    # ── HOJA 2 — RESUMEN POR CATEGORÍA ──
+    # --- HOJA 2 — RESUMEN POR CATEGORÍA ---
     ws2 = wb.create_sheet("Por Categoría")
 
     ws2.merge_cells("A1:C1")
@@ -396,19 +424,16 @@ def exportar_excel():
         as_attachment=True,
         download_name=nombre_archivo
     )
-#-----------------------------------------------------------------------------------
-# Endpoint para exportacion de resumen y lista de movimientos en PDF
-# Endpoint para exportacion de resumen y lista de movimientos en PDF
-@app.route("/presupuesto/exportar/pdf")
-def exportar_pdf():
-    from fpdf import FPDF
-    import os
 
+@app.route("/presupuesto/exportar/pdf")
+@token_required
+def exportar_pdf(user_id): # Recibe user_id
+    # fpdf y os ya importados arriba
     filtro = request.args.get("filtro", "mensual")
-    movimientos = obtener_movimientos(filtro)
+    # obtener_movimientos ahora requiere user_id
+    movimientos = obtener_movimientos(user_id, filtro)
 
     # Ruta a las fuentes — relativa al archivo app.py
-    # Equivalente en Python: Path(__file__).parent / "fonts"
     base_dir = os.path.dirname(os.path.abspath(__file__))
     fuente_regular = os.path.join(base_dir, "fonts", "DejaVuSans.ttf")
     fuente_bold = os.path.join(base_dir, "fonts", "DejaVuSans-Bold.ttf")
@@ -417,7 +442,6 @@ def exportar_pdf():
     pdf.set_auto_page_break(auto=True, margin=15)
 
     # Cargamos la fuente con soporte Unicode completo
-    # sin esto, tildes y ñ tiran FPDFUnicodeEncodingException
     pdf.add_font("DejaVu", style="", fname=fuente_regular)
     pdf.add_font("DejaVu", style="B", fname=fuente_bold)
 
@@ -448,7 +472,6 @@ def exportar_pdf():
     pdf.set_fill_color(*GRIS_CLARO)
     pdf.cell(63, 10, f"Ingresos: ${total_ingresos:,.0f}", border=0, fill=True, align="C")
     pdf.cell(63, 10, f"Gastos: ${total_gastos:,.0f}", border=0, fill=True, align="C")
-    color_balance = VERDE if balance >= 0 else ROJO
     pdf.set_text_color(*color_balance)
     pdf.cell(63, 10, f"Balance: ${balance:,.0f}", border=0, fill=True, align="C", ln=True)
     pdf.set_text_color(0, 0, 0)
@@ -469,15 +492,14 @@ def exportar_pdf():
     pdf.set_font("DejaVu", "", 8)
     for i, mov in enumerate(movimientos):
         es_ingreso = mov["tipo"] == "ingreso"
-        # Filas alternadas — verde claro / rojo claro
         if es_ingreso:
-            pdf.set_fill_color(220, 252, 231)  # verde muy claro
+            pdf.set_fill_color(220, 252, 231)
         else:
-            pdf.set_fill_color(254, 226, 226)  # rojo muy claro
+            pdf.set_fill_color(254, 226, 226)
 
         fecha = mov["fecha"][:10]
         tipo = "Ingreso" if es_ingreso else "Gasto"
-        categoria = mov["categoria"][:20]  # cortamos si es muy largo
+        categoria = mov["categoria"][:20]
         descripcion = (mov.get("descripcion") or "")[:25]
         monto = f"${mov['monto']:,.0f}"
 
@@ -486,7 +508,6 @@ def exportar_pdf():
         pdf.cell(45, 7, categoria, border=0, fill=True, align="C")
         pdf.cell(55, 7, descripcion, border=0, fill=True, align="L")
 
-        # Monto en color según tipo
         pdf.set_text_color(*(VERDE if es_ingreso else ROJO))
         pdf.cell(35, 7, monto, border=0, fill=True, align="C", ln=True)
         pdf.set_text_color(0, 0, 0)
@@ -528,21 +549,17 @@ def exportar_pdf():
     pdf.set_text_color(0, 0, 0)
 
     # — Agrupar gastos por categoría —
-    # Equivalente en Python:
-    # {cat: sum(m['monto'] for m in movimientos if m['categoria'] == cat}
     por_categoria = {}
     for mov in movimientos:
         if mov["tipo"] == "gasto":
             cat = mov["categoria"]
             por_categoria[cat] = por_categoria.get(cat, 0) + mov["monto"]
 
-    # Ordenamos de mayor a menor gasto
     por_categoria_ordenado = sorted(por_categoria.items(), key=lambda x: x[1], reverse=True)
 
     pdf.set_font("DejaVu", "", 10)
     for i, (cat, monto) in enumerate(por_categoria_ordenado):
         porcentaje = (monto / total_gastos * 100) if total_gastos > 0 else 0
-        # Filas alternadas gris/blanco
         fill_color = GRIS_CLARO if i % 2 == 0 else BLANCO
         pdf.set_fill_color(*fill_color)
         pdf.cell(90, 8, cat, border=0, fill=True, align="C")
@@ -570,8 +587,8 @@ def exportar_pdf():
         as_attachment=True,
         download_name=nombre_archivo
     )
-if __name__ == "__main__":
-    creacion_tabla_alquiler()
-    creacion_tabla()
-    app.run(debug=True)
 
+if __name__ == "__main__":
+    # Las funciones de creacion_tabla ya no hacen nada, pero las dejamos por consistencia.
+    # El app_context ya las llamó al inicio.
+    app.run(debug=True)

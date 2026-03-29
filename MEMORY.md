@@ -1,0 +1,3 @@
+- Qué acabás de hacer: He creado el archivo [`auth.py`](auth.py) con el decorador `@token_required`.
+- Qué variables de entorno nuevas se usan: N/A
+- Cuál es el próximo paso pendiente: Integrar el decorador `@token_required` en los endpoints de Flask en [`app.py`](app.py) que requieran autenticación y `user_id`, y adaptar las rutas para usar las funciones migradas de [`database.py`](database.py).
