@@ -1,296 +1,196 @@
-import sqlite3
-from datetime import datetime
+import os
+from datetime import datetime, timedelta # Agregado timedelta
+from supabase import create_client, Client
+from dotenv import load_dotenv
 
+# --- Configuración de Supabase ---
+load_dotenv()
 
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")  # service_role key
 
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+# --- Funciones de Creación de Tablas (Ahora gestionadas en Supabase directamente) ---
+# Estas funciones ya no crean tablas, solo sirven como placeholders.
+# La creación y gestión del esquema se hace en el SQL Editor de Supabase.
 def creacion_tabla():
-    
-    conexion = sqlite3.connect("dolar.db")
-    cursor = conexion.cursor()
+    """Placeholder para la creación de la tabla de cotizaciones en Supabase."""
+    pass
 
-    cursor.execute("""
-            CREATE TABLE IF NOT EXISTS cotizaciones (
-               id INTEGER PRIMARY KEY AUTOINCREMENT,
-               fuente TEXT,
-               venta REAL,
-               compra REAL,
-               fecha TEXT
-               
-               
-               )
-    """)
-    conexion.commit()
-    conexion.close()
 def creacion_tabla_alquiler():
-    
-    conexion = sqlite3.connect("dolar.db")
-    cursor = conexion.cursor()
-
-    cursor.execute("""
-            CREATE TABLE IF NOT EXISTS calculo_alquiler (
-               id INTEGER PRIMARY KEY AUTOINCREMENT,
-               alquiler_inicial REAL,
-               alquiler_final REAL,
-               fecha_inicio TEXT,
-               fecha_calculo TEXT,
-               tipo_indice TEXT
-               
-               
-               )
-    """)
-    conexion.commit()
-    conexion.close()
+    """Placeholder para la creación de la tabla de cálculo de alquiler en Supabase."""
+    pass
 
 def creacion_tabla_presupuesto():
-    """Crea la tabla de movimientos de presupuesto si no existe"""
-    conexion = sqlite3.connect("dolar.db")
-    cursor = conexion.cursor()
+    """Placeholder para la creación de la tabla de movimientos de presupuesto en Supabase."""
+    pass
 
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS presupuesto (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            tipo TEXT NOT NULL,         -- 'ingreso' o 'gasto'
-            categoria TEXT NOT NULL,    -- 'Sueldo', 'Alquiler', etc
-            descripcion TEXT,           -- detalle opcional del usuario
-            monto REAL NOT NULL,        -- siempre positivo, el tipo define si suma o resta
-            fecha TEXT NOT NULL         -- formato ISO: '2026-03-18T22:00:00'
-        )
-    """)
+# --- Funcionalidades Migradas a Supabase ---
 
-    conexion.commit()
-    conexion.close()
+def agregar_movimiento(user_id: str, tipo: str, categoria: str, descripcion: str, monto: float):
+    """
+    Inserta un movimiento en PostgreSQL (tabla presupuesto) asociado al user_id.
+    """
+    data = {
+        "user_id": user_id,
+        "tipo": tipo,
+        "categoria": categoria,
+        "descripcion": descripcion,
+        "monto": monto,
+        "fecha": datetime.now().isoformat() # Usamos la fecha actual en ISO format
+    }
+    response = supabase.table("presupuesto").insert(data).execute()
+    # Verificamos si hay error en la respuesta de Supabase
+    if response.data and not response.data[0]:
+        print(f"Error al agregar movimiento: {response.data}")
+    return response.data
+
+def editar_movimiento(user_id: str, id: str, tipo: str, categoria: str, descripcion: str, monto: float):
+    """
+    Edita un movimiento existente por su id, asegurando que pertenezca al user_id.
+    """
+    data = {
+        "tipo": tipo,
+        "categoria": categoria,
+        "descripcion": descripcion,
+        "monto": monto
+    }
+    # Filtramos por id Y user_id para seguridad de multi-tenancy
+    response = supabase.table("presupuesto").update(data).eq("id", id).eq("user_id", user_id).execute()
+    return response.data
+
+def obtener_movimientos(user_id: str, filtro: str = "mensual") -> list:
+    """
+    Devuelve los movimientos del user_id según el filtro temporal desde Supabase.
+    """
+    query = supabase.table("presupuesto").select("*").eq("user_id", user_id)
+
+    now = datetime.now()
+    if filtro == "semanal":
+        # Filtra por la última semana
+        seven_days_ago = now - timedelta(days=7)
+        query = query.gte("fecha", seven_days_ago.isoformat())
+    elif filtro == "anual":
+        # Filtra por el año actual
+        start_of_year = datetime(now.year, 1, 1)
+        query = query.gte("fecha", start_of_year.isoformat())
+    else:  # mensual por defecto
+        # Filtra por el mes actual
+        start_of_month = datetime(now.year, now.month, 1)
+        query = query.gte("fecha", start_of_month.isoformat())
+
+    response = query.order("fecha", desc=True).execute()
+    return response.data
+
+def borrar_movimiento(user_id: str, id: str) -> int:
+    """
+    Borra un movimiento por su id, asegurando que pertenezca al user_id.
+    Devuelve la cantidad de filas borradas.
+    """
+    # Filtramos por id Y user_id para seguridad
+    response = supabase.table("presupuesto").delete().eq("id", id).eq("user_id", user_id).execute()
+    return len(response.data) if response.data else 0
+
+def reset_presupuesto(user_id: str):
+    """
+    Borra todos los movimientos de presupuesto para un user_id específico.
+    """
+    response = supabase.table("presupuesto").delete().eq("user_id", user_id).execute()
+    return response.data
 
 
-def guardar_ajuste(alquiler_inicial,alquiler_final,fecha_inicio,fecha_calculo,indice):
-    conexion = sqlite3.connect("dolar.db")
-    cursor = conexion.cursor()
+def guardar_ajuste(user_id: str, alquiler_inicial: float, alquiler_final: float, fecha_inicio: str, fecha_calculo: str, indice: str):
+    """
+    Guarda un ajuste de cálculo de alquiler asociado al user_id.
+    """
+    data = {
+        "user_id": user_id,
+        "alquiler_inicial": alquiler_inicial,
+        "alquiler_final": alquiler_final,
+        "fecha_inicio": fecha_inicio,
+        "fecha_calculo": fecha_calculo,
+        "tipo_indice": indice
+    }
+    response = supabase.table("calculo_alquiler").insert(data).execute()
+    return response.data
 
-    cursor.execute("""
-               INSERT INTO calculo_alquiler (alquiler_inicial, alquiler_final, fecha_inicio, fecha_calculo, tipo_indice)
-               VALUES (?, ?, ?, ?, ?)
-               """, (alquiler_inicial, alquiler_final, fecha_inicio, fecha_calculo, indice))
+def obtener_historial_alquiler(user_id: str) -> list:
+    """
+    Devuelve el historial de cálculos de alquiler para un user_id específico.
+    """
+    response = supabase.table("calculo_alquiler").select("*").eq("user_id", user_id).order("fecha_calculo", desc=True).execute()
+    return response.data
 
-    conexion.commit()
-    conexion.close()
+def borrar_calculo(user_id: str, id: str) -> int:
+    """
+    Borra un registro específico del historial de alquiler por su id y user_id.
+    Devuelve la cantidad de filas borradas.
+    """
+    response = supabase.table("calculo_alquiler").delete().eq("id", id).eq("user_id", user_id).execute()
+    return len(response.data) if response.data else 0
+
+def borrar_historial_completo(user_id: str):
+    """
+    Borra todos los registros del historial de alquiler para un user_id específico.
+    """
+    response = supabase.table("calculo_alquiler").delete().eq("user_id", user_id).execute()
+    return response.data
 
 
-def guardar_cotizacion(fuente,venta,compra):
-    conexion = sqlite3.connect("dolar.db")
-    cursor = conexion.cursor()
-    fecha = datetime.now().isoformat()
+# --- Funciones de Cotizaciones (Datos Globales - SIN user_id) ---
 
-    cursor.execute("""
-               INSERT INTO cotizaciones (fuente, venta, compra, fecha)
-               VALUES (?, ?, ?, ?)
-               """, (fuente, venta, compra, fecha))
+def guardar_cotizacion(fuente: str, venta: float, compra: float):
+    """
+    Guarda una cotización global. No requiere user_id.
+    """
+    data = {
+        "fuente": fuente,
+        "venta": venta,
+        "compra": compra,
+        "fecha": datetime.now().isoformat()
+    }
+    response = supabase.table("cotizaciones").insert(data).execute()
+    return response.data
 
-    conexion.commit()
-    conexion.close()
-def reset_presupuesto():
-    conexion = sqlite3.connect("dolar.db")
-    cursor = conexion.cursor()
-    cursor.execute("DELETE FROM presupuesto")
-    conexion.commit()
-    conexion.close()
-    
 def obtener_cotizacion_anterior(fuente: str):
-    """Devuelve las últimas DOS cotizaciones de una casa para calcular variación"""
-    conexion = sqlite3.connect("dolar.db")
-    cursor = conexion.cursor()
-    
-    # Trae las últimas 2 entradas de esa casa ordenadas por fecha
-    # El ORDER BY DESC trae primero la más reciente
-    cursor.execute("""
-        SELECT venta, compra, fecha 
-        FROM cotizaciones 
-        WHERE fuente = ? 
-        ORDER BY fecha DESC 
-        LIMIT 2
-    """, (fuente,))
-    
-    resultados = cursor.fetchall()
-    conexion.close()
-    
-    # Si hay menos de 2 registros no podemos calcular variación
+    """
+    Devuelve las últimas DOS cotizaciones de una fuente para calcular variación. No requiere user_id.
+    """
+    # Ordenamos por fecha descendente y limitamos a 2.
+    response = supabase.table("cotizaciones").select("venta, compra, fecha").eq("fuente", fuente).order("fecha", desc=True).limit(2).execute()
+    resultados = response.data
+
     if len(resultados) < 2:
         return None
-    
-    # resultados[0] es el actual, resultados[1] es el anterior
+
     return {
-        "actual": {
-            "venta": resultados[0][0],
-            "compra": resultados[0][1],
-            "fecha": resultados[0][2]
-        },
-        "anterior": {
-            "venta": resultados[1][0],
-            "compra": resultados[1][1],
-            "fecha": resultados[1][2]
-        }
+        "actual": resultados[0],
+        "anterior": resultados[1]
     }
 
 def mostrar_cotizacion():
-    conexion = sqlite3.connect("dolar.db")
-    cursor = conexion.cursor()
-    cursor.execute("SELECT * FROM cotizaciones")
-    resultados = cursor.fetchall()
-
-    for fila in resultados:
+    """
+    Muestra todas las cotizaciones globales.
+    """
+    response = supabase.table("cotizaciones").select("*").execute()
+    for fila in response.data:
         print(fila)
-    conexion.close()
-
-def obtener_historial_alquiler():
-    conexion = sqlite3.connect("dolar.db")
-    cursor = conexion.cursor()
-    cursor.execute("SELECT * FROM calculo_alquiler")
-    resultados = cursor.fetchall()
-    historial = []
-    for fila in resultados:
-        new_fila = {
-           "id": fila[0],
-           "alquiler_inicial": fila[1],
-           "alquiler_final": fila[2],
-           "fecha_inicio": fila[3],
-           "fecha_calculo": fila[4],
-           "tipo_indice": fila[5]
-       }
-        historial.append(new_fila)
-    conexion.close()
-    return historial
+    return response.data # Devolvemos los datos para un uso más programático
 
 def obtener_historial_cotizacion(fuente: str, limite: int = 30):
-    """Devuelve los últimos N registros de una casa para graficar"""
-    conexion = sqlite3.connect("dolar.db")
-    cursor = conexion.cursor()
-    
-    cursor.execute("""
-        SELECT venta, compra, fecha 
-        FROM cotizaciones 
-        WHERE fuente = ? 
-        ORDER BY fecha DESC 
-        LIMIT ?
-    """, (fuente, limite))
-    
-    resultados = cursor.fetchall()
-    conexion.close()
-    
-    # Invertimos para que el gráfico vaya de más viejo a más nuevo
-    resultados.reverse()
-    
-    return [
-        {
-            "venta": fila[0],
-            "compra": fila[1],
-            "fecha": fila[2]
-        }
-        for fila in resultados
-    ]
-#(id: int) anotacion que indica el tipo de valor esperado
-def borrar_calculo(id: int):
-    """Borra un registro específico del historial por su id"""
-    conexion = sqlite3.connect("dolar.db")
-    cursor = conexion.cursor()
-    cursor.execute("DELETE FROM calculo_alquiler WHERE id = ?" , (id,))
-    filas_encontradas = cursor.rowcount # cuántas filas borró
-    conexion.commit()
-    conexion.close()
-    return filas_encontradas # devuelve 0 si el id no existía
-
-def borrar_historial_completo():
-    """Borra todos los registros del historial"""
-    conexion = sqlite3.connect("dolar.db")
-    cursor = conexion.cursor()
-    cursor.execute("DELETE FROM calculo_alquiler")
-    conexion.commit()
-    conexion.close()
-#----------------------------------------------------------------------------------------------------------------
-#Funcionalidades CRUD para tabla presupuesto:
-def agregar_movimiento(tipo: str, categoria: str, descripcion: str, monto: float):
-    """Agrega un ingreso o gasto al presupuesto"""
-    conexion = sqlite3.connect("dolar.db")
-    cursor = conexion.cursor()
-    fecha = datetime.now().isoformat()
-
-    cursor.execute("""
-        INSERT INTO presupuesto (tipo, categoria, descripcion, monto, fecha)
-        VALUES (?, ?, ?, ?, ?)
-    """, (tipo, categoria, descripcion, monto, fecha))
-
-    conexion.commit()
-    conexion.close()
-
-def editar_movimiento(id: int, tipo: str, categoria: str, descripcion: str, monto: float):
-    """Edita un movimiento existente por su id"""
-    conexion = sqlite3.connect("dolar.db")
-    cursor = conexion.cursor()
-
-    cursor.execute("""
-        UPDATE presupuesto
-        SET tipo = ?, categoria = ?, descripcion = ?, monto = ?
-        WHERE id = ?
-    """, (tipo, categoria, descripcion, monto, id))
-
-    filas = cursor.rowcount  # 0 si el id no existía
-    conexion.commit()
-    conexion.close()
-    return filas
-
-def obtener_movimientos(filtro: str = "mensual") -> list:
     """
-    Devuelve los movimientos según el filtro temporal.
-    filtro: 'semanal', 'mensual' o 'anual'
-    
-    Equivalente en Python:
-    [m for m in movimientos if m['fecha'] >= fecha_inicio]
+    Devuelve los últimos N registros de una fuente para graficar. No requiere user_id.
     """
-    conexion = sqlite3.connect("dolar.db")
-    cursor = conexion.cursor()
+    response = supabase.table("cotizaciones").select("venta, compra, fecha").eq("fuente", fuente).order("fecha", desc=True).limit(limite).execute()
+    resultados = response.data
+    resultados.reverse() # Invertimos para que el gráfico vaya de más viejo a más nuevo
+    return resultados
 
-    # Definimos el filtro de fecha según la opción elegida
-    if filtro == "semanal":
-        condicion = "fecha >= datetime('now', '-7 days')"
-    elif filtro == "anual":
-        condicion = "strftime('%Y', fecha) = strftime('%Y', 'now')"
-    else:  # mensual por defecto
-        condicion = "strftime('%Y-%m', fecha) = strftime('%Y-%m', 'now')"
-
-    cursor.execute(f"""
-        SELECT id, tipo, categoria, descripcion, monto, fecha
-        FROM presupuesto
-        WHERE {condicion}
-        ORDER BY fecha DESC
-    """)
-
-    resultados = cursor.fetchall()
-    conexion.close()
-
-    return [
-        {
-            "id": fila[0],
-            "tipo": fila[1],
-            "categoria": fila[2],
-            "descripcion": fila[3],
-            "monto": fila[4],
-            "fecha": fila[5]
-        }
-        for fila in resultados
-    ]
-
-def borrar_movimiento(id: int) -> int:
-    """Borra un movimiento por su id. Devuelve 0 si no existía."""
-    conexion = sqlite3.connect("dolar.db")
-    cursor = conexion.cursor()
-    cursor.execute("DELETE FROM presupuesto WHERE id = ?", (id,))
-    filas = cursor.rowcount
-    conexion.commit()
-    conexion.close()
-    return filas
-
+# --- Bloque de ejecución principal (solo para pruebas locales, adaptado) ---
 if __name__ == "__main__":
-    creacion_tabla()
-    creacion_tabla_alquiler()
-    mostrar_cotizacion()
-    obtener_historial_alquiler()
-
-
-
+    print("Iniciando pruebas de Supabase (las funciones de creación de tablas no hacen nada aquí).")
+    # Para probar, deberías interactuar con tus endpoints de Flask o usar el cliente directamente
+    # de forma interactiva, asegurándote de tener un usuario y un token válidos.
+    print("Recuerda que la creación de tablas se realiza directamente en Supabase SQL Editor.")
+    print("También es crucial habilitar y configurar Row Level Security (RLS) en Supabase para tus tablas de usuario.")
