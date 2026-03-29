@@ -4,3 +4,4 @@ workspace.code-workspace
 __pycache__/
 dolar.db
 requirments.txt
+.env
