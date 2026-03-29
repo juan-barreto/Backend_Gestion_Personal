@@ -1,3 +1,3 @@
-- Qué acabás de hacer: He creado el archivo [`auth.py`](auth.py) con el decorador `@token_required`.
-- Qué variables de entorno nuevas se usan: N/A
-- Cuál es el próximo paso pendiente: Integrar el decorador `@token_required` en los endpoints de Flask en [`app.py`](app.py) que requieran autenticación y `user_id`, y adaptar las rutas para usar las funciones migradas de [`database.py`](database.py).
+- Qué acabás de hacer: He adaptado completamente el archivo [`app.py`](app.py), integrando el decorador `@token_required` en los endpoints que manejan datos de usuario (presupuesto, alquiler) y adaptando las llamadas a las funciones de [`database.py`](database.py) para pasar el `user_id`. Los endpoints de datos globales (dólar, ipc, icl, ripte, cotizaciones) no requieren token.
+- Qué variables de entorno nuevas se usan: RAILWAY_APP_URL (para el ping_propio).
+- Cuál es el próximo paso pendiente: Realizar pruebas exhaustivas del backend y frontend para asegurar que la migración a Supabase y la multi-tenancy funcionan correctamente. Esto incluye probar la creación, lectura, actualización y eliminación de movimientos de presupuesto y cálculos de alquiler con diferentes usuarios, y verificar que las cotizaciones globales se siguen obteniendo sin autenticación. También, asegurarse de que las tablas estén correctamente creadas y con RLS habilitado en Supabase.
