@@ -275,6 +275,25 @@ def assetlinks():
         mimetype="application/json"
     )
 
+#respuesta de recuperacion de contraseña suapbase a la app
+@app.route("/auth/reset-password")
+def reset_password_redirect():
+    token_hash = request.args.get("token_hash", "")
+    type_ = request.args.get("type", "recovery")
+    # Redirige a la app via deep link
+    deep_link = f"com.candlelabs.gestionpersonal://reset-password?token_hash={token_hash}&type={type_}"
+    return f'''
+    <html>
+    <head>
+        <meta http-equiv="refresh" content="0;url={deep_link}" />
+    </head>
+    <body>
+        <p>Redirigiendo a Plata Clara...</p>
+        <a href="{deep_link}">Tocá acá si no abre automáticamente</a>
+    </body>
+    </html>
+    '''
+
 # --- Endpoints de Exportación (Requieren user_id) ---
 @app.route("/presupuesto/exportar/excel")
 @token_required
