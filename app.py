@@ -1,7 +1,7 @@
 from flask import Flask, jsonify, request
 from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime, timedelta # Agregamos timedelta para filtros de fecha
-
+import json
 # --- Importaciones de Database (Migradas a Supabase) ---
 # Importamos directamente las funciones necesarias, no las de creacion_tabla que ya no son activas.
 from database import (
