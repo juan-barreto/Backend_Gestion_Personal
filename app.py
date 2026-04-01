@@ -255,6 +255,25 @@ def reset_presupuesto_endpoint(user_id): # Recibe user_id
     # reset_presupuesto ahora requiere user_id
     reset_presupuesto(user_id)
     return jsonify({"mensaje": "Todos los movimientos fueron eliminados para este usuario"}), 200
+# asset-link(verificacion entre app y railway)
+@app.route("/.well-known/assetlinks.json")
+def assetlinks():
+    data = [
+        {
+            "relation": ["delegate_permission/common.handle_all_urls"],
+            "target": {
+                "namespace": "android_app",
+                "package_name": "com.candlelabs.gestionpersonal",
+                "sha256_cert_fingerprints": [
+                    "39:1E:16:DA:C3:3E:04:1D:56:EC:03:71:57:C1:E0:29:98:01:11:26:A9:0D:91:19:57:75:38:85:8D:59:8F:AA"
+                ]
+            }
+        }
+    ]
+    return app.response_class(
+        response=json.dumps(data),
+        mimetype="application/json"
+    )
 
 # --- Endpoints de Exportación (Requieren user_id) ---
 @app.route("/presupuesto/exportar/excel")
