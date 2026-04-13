@@ -187,6 +187,17 @@ def obtener_historial_cotizacion(fuente: str, limite: int = 30):
     resultados.reverse() # Invertimos para que el gráfico vaya de más viejo a más nuevo
     return resultados
 
+def obtener_presupuestos_categorias(user_id):
+    res = supabase.table("presupuestos_categorias").select("*").eq("user_id", user_id).execute()
+    return {row["categoria"]: row["monto"] for row in res.data}
+
+def guardar_presupuesto_categoria(user_id, categoria, monto):
+    supabase.table("presupuestos_categorias").upsert({
+        "user_id": user_id,
+        "categoria": categoria,
+        "monto": monto
+    }, on_conflict="user_id,categoria").execute()
+
 # --- Bloque de ejecución principal (solo para pruebas locales, adaptado) ---
 if __name__ == "__main__":
     print("Iniciando pruebas de Supabase (las funciones de creación de tablas no hacen nada aquí).")

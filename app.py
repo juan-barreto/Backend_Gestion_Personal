@@ -8,8 +8,8 @@ from database import (
     creacion_tabla, creacion_tabla_alquiler, creacion_tabla_presupuesto, # Placeholders, no hacen nada
     guardar_ajuste, obtener_historial_alquiler, borrar_calculo, borrar_historial_completo,
     guardar_cotizacion, obtener_cotizacion_anterior, obtener_historial_cotizacion,
-    agregar_movimiento, obtener_movimientos, editar_movimiento, borrar_movimiento, reset_presupuesto
-)
+    agregar_movimiento, obtener_movimientos, editar_movimiento, borrar_movimiento, reset_presupuesto,
+    obtener_presupuestos_categorias,guardar_presupuesto_categoria)
 
 # --- Importaciones de Rutas Externas (no necesitan user_id por ahora) ---
 from routes.dolar import obtener_todos
@@ -200,17 +200,15 @@ def eliminar_historial_completo_endpoint(user_id): # Recibe user_id
 # --- Endpoints de guardar en card Categorías del Home ---
 @app.route("/presupuestos-categorias", methods=["GET"])
 @token_required
-def obtener_presupuestos_categorias(user_id):
-    from database import obtener_presupuestos_categorias
+def get_presupuestos_categorias(user_id):
     return jsonify(obtener_presupuestos_categorias(user_id))
 
 @app.route("/presupuestos-categorias", methods=["PUT"])
 @token_required
-def guardar_presupuesto_categoria(user_id):
+def put_presupuesto_categoria(user_id):
     body = request.get_json()
     categoria = body.get("categoria")
     monto = float(body.get("monto"))
-    from database import guardar_presupuesto_categoria
     guardar_presupuesto_categoria(user_id, categoria, monto)
     return jsonify({"mensaje": "ok"}), 200
 
