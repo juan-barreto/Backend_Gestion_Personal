@@ -197,6 +197,26 @@ def eliminar_historial_completo_endpoint(user_id): # Recibe user_id
     borrar_historial_completo(user_id)
     return jsonify({"mensaje": "Historial de cálculos eliminado"})
 
+# --- Endpoints de guardar en card Categorías del Home ---
+@app.route("/presupuestos-categorias", methods=["GET"])
+@token_required
+def obtener_presupuestos_categorias(user_id):
+    from database import obtener_presupuestos_categorias
+    return jsonify(obtener_presupuestos_categorias(user_id))
+
+@app.route("/presupuestos-categorias", methods=["PUT"])
+@token_required
+def guardar_presupuesto_categoria(user_id):
+    body = request.get_json()
+    categoria = body.get("categoria")
+    monto = float(body.get("monto"))
+    from database import guardar_presupuesto_categoria
+    guardar_presupuesto_categoria(user_id, categoria, monto)
+    return jsonify({"mensaje": "ok"}), 200
+
+
+
+
 # --- Endpoints de Presupuesto (Requieren user_id) ---
 @app.route("/presupuesto")
 @token_required
