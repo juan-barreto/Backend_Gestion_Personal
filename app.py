@@ -110,6 +110,33 @@ def asistente():
     respuesta = consultar_asistente(mensaje, historial, nombre)
     return jsonify({"respuesta": respuesta})
 
+# Reemplazá el endpoint /asistente en app.py por este:
+
+@app.route("/asistente", methods=["POST"])
+def asistente():
+    body     = request.get_json()
+    mensaje  = body.get("mensaje", "")
+    historial = body.get("historial", [])
+    nombre   = body.get("nombre", "Usuario")
+    ingreso  = float(body.get("ingreso", 0))
+    gastos   = float(body.get("gastos", 0))
+    balance  = float(body.get("balance", 0))
+    categorias = body.get("categorias", [])
+
+    if not mensaje:
+        return jsonify({"error": "Mensaje vacío"}), 400
+
+    respuesta = consultar_asistente(
+        mensaje   = mensaje,
+        historial = historial,
+        nombre    = nombre,
+        ingreso   = ingreso,
+        gastos    = gastos,
+        balance   = balance,
+        categorias = categorias
+    )
+    return jsonify({"respuesta": respuesta})
+
 @app.route("/ipc")
 def ipc():
     datos = obtener_ipc()
