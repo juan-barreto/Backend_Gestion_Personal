@@ -76,10 +76,11 @@ def obtener_movimientos(user_id: str, filtro: str = "mensual") -> list:
         start_of_year = datetime(now.year, 1, 1)
         query = query.gte("fecha", start_of_year.isoformat())
     elif filtro == "mensual_anterior":
-        # Primer y último día del mes anterior
-        primer_dia_mes_actual = datetime(now.year, now.month, 1)
+        from datetime import timezone
+        now_utc = datetime.now(timezone.utc)
+        primer_dia_mes_actual = datetime(now_utc.year, now_utc.month, 1, tzinfo=timezone.utc)
         ultimo_mes = primer_dia_mes_actual - timedelta(days=1)
-        inicio_mes_anterior = datetime(ultimo_mes.year, ultimo_mes.month, 1)
+        inicio_mes_anterior = datetime(ultimo_mes.year, ultimo_mes.month, 1, tzinfo=timezone.utc)
         query = query.gte("fecha", inicio_mes_anterior.isoformat())
         query = query.lt("fecha", primer_dia_mes_actual.isoformat())
     else:  # mensual por defecto
