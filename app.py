@@ -2,6 +2,7 @@ from flask import Flask, jsonify, request
 from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime, timedelta # Agregamos timedelta para filtros de fecha
 import json
+from routes.mercadopago import mp_bp
 # --- Importaciones de Database (Migradas a Supabase) ---
 # Importamos directamente las funciones necesarias, no las de creacion_tabla que ya no son activas.
 from database import (
@@ -42,7 +43,7 @@ GRIS_CLARO   = (243, 244, 246)
 BLANCO       = (255, 255, 255)
 
 app = Flask(__name__)
-
+app.register_blueprint(mp_bp)
 
 # --- Funciones de Scheduler ---
 def actualizar_cotizaciones():
