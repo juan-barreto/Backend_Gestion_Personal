@@ -11,7 +11,9 @@ MP_CLIENT_ID     = os.getenv("MP_CLIENT_ID")
 MP_CLIENT_SECRET = os.getenv("MP_CLIENT_SECRET")
 MP_REDIRECT_URI  = os.getenv("MP_REDIRECT_URI")
 
-# ── 1. Iniciar OAuth — la app redirige al usuario a MP ─────
+
+# ── 1. Iniciar OAuth — la app abre esta URL en el navegador ─
+# GET /mp/auth?user_id=<supabase_user_id>
 @mp_bp.route("/mp/auth")
 def mp_auth():
     user_id = request.args.get("user_id")
@@ -29,7 +31,9 @@ def mp_auth():
     return redirect(url)
 
 
-# ── 2. Callback — MP redirige acá con el code ──────────────
+# ── 2. Callback — MP redirige acá con el code de autorización ─
+# MP llama GET /mp/callback?code=xxx&state=<user_id>
+# Intercambiamos el code por access_token y lo guardamos en Supabase
 @mp_bp.route("/mp/callback")
 def mp_callback():
     code    = request.args.get("code")
@@ -52,18 +56,25 @@ def mp_callback():
     if respuesta.status_code != 200:
         return jsonify({"error": "Error al obtener token", "detalle": respuesta.json()}), 400
 
-    datos = respuesta.json()
+    datos         = respuesta.json()
     access_token  = datos.get("access_token")
     refresh_token = datos.get("refresh_token")
     mp_user_id    = datos.get("user_id")
 
     guardar_token_mp(user_id, access_token, refresh_token, mp_user_id)
 
-    deep_link = f"com.candlelabs.gestionpersonal://mp-callback?status=ok"
+    # Redirigimos a la app via deep link para cerrar el navegador
+    deep_link = "com.candlelabs.gestionpersonal://mp-callback?status=ok"
     return redirect(deep_link)
 
 
-# ── 3. Movimientos — trae los movimientos del usuario ──────
+# ── 3. Movimientos — trae y limpia los pagos del usuario ───
+# Llama a /v1/payments/search de MP y devuelve una lista simplificada
+# Los campos de nombre se resuelven en este orden:
+#   1. description  → nombre más legible ("Edenor", "Compra en DIA", "SUBE")
+#   2. statement_descriptor → fallback para pagos con tarjeta ("MERPAGO*SUPERDIA")
+#   3. branch → categoría genérica de MP ("QR", "Bill Payments - Agenda")
+#   4. "Pago" → último recurso
 @mp_bp.route("/mp/movimientos")
 @token_required
 def mp_movimientos(user_id):
@@ -72,7 +83,7 @@ def mp_movimientos(user_id):
         return jsonify({"error": "No hay cuenta de MP conectada"}), 404
 
     access_token = token_data["access_token"]
-    mp_user_id   = token_data["mp_user_id"]
+    mp_user_id   = int(token_data["mp_user_id"])
 
     offset = int(request.args.get("offset", 0))
     limit  = int(request.args.get("limit", 20))
@@ -81,10 +92,10 @@ def mp_movimientos(user_id):
         "https://api.mercadopago.com/v1/payments/search",
         headers={"Authorization": f"Bearer {access_token}"},
         params={
-            "sort":    "date_created",
+            "sort":     "date_created",
             "criteria": "desc",
-            "limit":   limit,
-            "offset":  offset
+            "limit":    limit,
+            "offset":   offset
         }
     )
 
@@ -92,69 +103,51 @@ def mp_movimientos(user_id):
         return jsonify({"error": "Token expirado", "codigo": "token_expired"}), 401
 
     if respuesta.status_code != 200:
-        # ── DEBUG — sacar después de resolver el 400 ──────
-        print("=== ERROR MP ===")
-        print("STATUS:", respuesta.status_code)
-        print("BODY:", respuesta.text)
-        print("================")
         return jsonify({"error": "Error al obtener movimientos", "detalle": respuesta.text}), 400
 
-    # MP devuelve {"results": [...], "paging": {...}}
-    # devolvemos solo la lista de pagos
-    datos = respuesta.json()
-    resultados = datos.get("results", [])
-
-    # mp_user_id del token — con esto sabemos si el usuario pagó o cobró
-    mp_user_id = int(token_data["mp_user_id"])
+    resultados = respuesta.json().get("results", [])
 
     movimientos_limpios = []
     for p in resultados:
-        
-    # Filtrar rendimientos y pagos intermedios del banco
+        # Filtrar transferencias internas de MP y rendimientos
         operation_type = p.get("operation_type", "")
         if operation_type in ("money_transfer", "investment"):
             continue
-        
-         # ── DEBUG — loguear campos candidatos para el nombre ──
-        print(
-            p.get("id"), "|",
-            p.get("statement_descriptor"), "|",
-            p.get("description"), "|",
-            (p.get("point_of_interaction") or {}).get("business_info")
-        )
-        payer_id = p.get("payer_id")
-        es_gasto = (payer_id == mp_user_id)
 
-        # Descripción: primero business_info, luego statement_descriptor, luego description
-        poi      = p.get("point_of_interaction") or {}
-        biz      = poi.get("business_info") or {}
-        nombre   = (
-        biz.get("branch")
-        or p.get("statement_descriptor")
-        or p.get("description")
-        or "Pago"
+        # Si payer_id es el usuario → él pagó → gasto. Si no → le pagaron → ingreso
+        es_gasto = (p.get("payer_id") == mp_user_id)
+
+        # Resolver nombre del pago
+        poi    = p.get("point_of_interaction") or {}
+        biz    = poi.get("business_info") or {}
+        nombre = (
+            p.get("description")
+            or p.get("statement_descriptor")
+            or biz.get("branch")
+            or "Pago"
         )
 
-        # Traducción de nombres técnicos de MP al español
+        # Traducir los pocos casos donde description es un ID numérico o código técnico
         traducciones = {
-            "Transport - Public transport recharge": "SUBE - Carga",
-            "Intra MP": "Transferencia MP",
+            "238244854":    "SUBE - Carga",
+            "Bank Transfer": "Transferencia bancaria",
         }
         nombre = traducciones.get(nombre, nombre)
 
         movimientos_limpios.append({
-            "id":        p.get("id"),
-            "nombre":    nombre,
-            "monto":     p.get("transaction_amount", 0),
-            "es_gasto":  es_gasto,
-            "fecha":     (p.get("date_created") or "")[:10],
-            "status":    p.get("status"),
+            "id":       p.get("id"),
+            "nombre":   nombre,
+            "monto":    p.get("transaction_amount", 0),
+            "es_gasto": es_gasto,
+            "fecha":    (p.get("date_created") or "")[:10],
+            "status":   p.get("status"),
         })
 
     return jsonify(movimientos_limpios)
 
 
-# ── 4. Estado — verifica si el usuario ya tiene MP conectado ──
+# ── 4. Estado — verifica si el usuario ya tiene MP conectado ─
+# Solo consulta Supabase, no llama a la API de MP
 @mp_bp.route("/mp/estado")
 @token_required
 def mp_estado(user_id):
@@ -162,7 +155,7 @@ def mp_estado(user_id):
     return jsonify({"conectado": token_data is not None})
 
 
-# ── 5. Desconectar MP ──────────────────────────────────────
+# ── 5. Desconectar — borra el token de Supabase ────────────
 @mp_bp.route("/mp/desconectar", methods=["DELETE"])
 @token_required
 def mp_desconectar(user_id):
