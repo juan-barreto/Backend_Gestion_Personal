@@ -78,11 +78,13 @@ def mp_movimientos(user_id):
     limit  = int(request.args.get("limit", 20))
 
     respuesta = requests.get(
-        "https://api.mercadopago.com/v1/account/movements/search",
+        "https://api.mercadopago.com/v1/payments/search",
         headers={"Authorization": f"Bearer {access_token}"},
         params={
-            "limit":  limit,
-            "offset": offset
+            "sort":    "date_created",
+            "criteria": "desc",
+            "limit":   limit,
+            "offset":  offset
         }
     )
 
