@@ -106,8 +106,15 @@ def mp_movimientos(user_id):
 
     return jsonify(respuesta.json())
 
+# ── 4. Estado — verifica si el usuario ya tiene MP conectado ──
+# No llama a la API de MP, solo mira si hay token en Supabase
+@mp_bp.route("/mp/estado")
+@token_required
+def mp_estado(user_id):
+    token_data = obtener_token_mp(user_id)
+    return jsonify({"conectado": token_data is not None})
 
-# ── 4. Desconectar MP ──────────────────────────────────────
+# ── 5. Desconectar MP ──────────────────────────────────────
 @mp_bp.route("/mp/desconectar", methods=["DELETE"])
 @token_required
 def mp_desconectar(user_id):
