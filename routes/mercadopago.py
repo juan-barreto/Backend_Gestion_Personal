@@ -102,7 +102,12 @@ def mp_movimientos(user_id):
     # MP devuelve {"results": [...], "paging": {...}}
     # devolvemos solo la lista de pagos
     datos = respuesta.json()
-    return jsonify(datos.get("results", []))
+# Logueamos el primer pago para ver la estructura real
+    if datos.get("results"):
+        print("=== PRIMER PAGO ===")
+        print(datos["results"][0])
+        print("===================")
+        return jsonify(datos.get("results", []))
 
 
 # ── 4. Estado — verifica si el usuario ya tiene MP conectado ──
