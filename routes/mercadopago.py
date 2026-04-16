@@ -117,6 +117,13 @@ def mp_movimientos(user_id):
         # Si payer_id es el usuario → él pagó → gasto. Si no → le pagaron → ingreso
         es_gasto = (p.get("payer_id") == mp_user_id)
 
+        # ── DEBUG — ver qué trae additional_info ──
+        print(
+            p.get("id"), "|",
+            p.get("description"), "|",
+            p.get("additional_info")
+        )
+
         # Resolver nombre del pago
         poi    = p.get("point_of_interaction") or {}
         biz    = poi.get("business_info") or {}
