@@ -102,12 +102,48 @@ def mp_movimientos(user_id):
     # MP devuelve {"results": [...], "paging": {...}}
     # devolvemos solo la lista de pagos
     datos = respuesta.json()
-# Logueamos el primer pago para ver la estructura real
-    if datos.get("results"):
-        print("=== PRIMER PAGO ===")
-        print(datos["results"][0])
-        print("===================")
-        return jsonify(datos.get("results", []))
+    resultados = datos.get("results", [])
+
+    # mp_user_id del token — con esto sabemos si el usuario pagó o cobró
+    mp_user_id = int(token_data["mp_user_id"])
+
+    movimientos_limpios = []
+    for p in resultados:
+    # Filtrar rendimientos y pagos intermedios del banco
+        operation_type = p.get("operation_type", "")
+        if operation_type in ("money_transfer", "investment"):
+            continue
+
+        payer_id = p.get("payer_id")
+        es_gasto = (payer_id == mp_user_id)
+
+        # Descripción: primero business_info, luego statement_descriptor, luego description
+        poi      = p.get("point_of_interaction") or {}
+        biz      = poi.get("business_info") or {}
+        nombre   = (
+        biz.get("branch")
+        or p.get("statement_descriptor")
+        or p.get("description")
+        or "Pago"
+        )
+
+        # Traducción de nombres técnicos de MP al español
+        traducciones = {
+            "Transport - Public transport recharge": "SUBE - Carga",
+            "Intra MP": "Transferencia MP",
+        }
+        nombre = traducciones.get(nombre, nombre)
+
+        movimientos_limpios.append({
+            "id":        p.get("id"),
+            "nombre":    nombre,
+            "monto":     p.get("transaction_amount", 0),
+            "es_gasto":  es_gasto,
+            "fecha":     (p.get("date_created") or "")[:10],
+            "status":    p.get("status"),
+        })
+
+    return jsonify(movimientos_limpios)
 
 
 # ── 4. Estado — verifica si el usuario ya tiene MP conectado ──
