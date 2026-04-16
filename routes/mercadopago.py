@@ -99,7 +99,10 @@ def mp_movimientos(user_id):
         print("================")
         return jsonify({"error": "Error al obtener movimientos", "detalle": respuesta.text}), 400
 
-    return jsonify(respuesta.json())
+    # MP devuelve {"results": [...], "paging": {...}}
+    # devolvemos solo la lista de pagos
+    datos = respuesta.json()
+    return jsonify(datos.get("results", []))
 
 
 # ── 4. Estado — verifica si el usuario ya tiene MP conectado ──
