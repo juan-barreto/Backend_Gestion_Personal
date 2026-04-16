@@ -109,11 +109,19 @@ def mp_movimientos(user_id):
 
     movimientos_limpios = []
     for p in resultados:
+        
     # Filtrar rendimientos y pagos intermedios del banco
         operation_type = p.get("operation_type", "")
         if operation_type in ("money_transfer", "investment"):
             continue
-
+        
+         # ── DEBUG — loguear campos candidatos para el nombre ──
+        print(
+            p.get("id"), "|",
+            p.get("statement_descriptor"), "|",
+            p.get("description"), "|",
+            (p.get("point_of_interaction") or {}).get("business_info")
+        )
         payer_id = p.get("payer_id")
         es_gasto = (payer_id == mp_user_id)
 
