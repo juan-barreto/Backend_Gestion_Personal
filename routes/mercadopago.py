@@ -12,16 +12,12 @@ MP_CLIENT_SECRET = os.getenv("MP_CLIENT_SECRET")
 MP_REDIRECT_URI  = os.getenv("MP_REDIRECT_URI")
 
 # ── 1. Iniciar OAuth — la app redirige al usuario a MP ─────
-# La app Android abre esta URL en el navegador
-# Ejemplo: GET /mp/auth?user_id=<supabase_user_id>
 @mp_bp.route("/mp/auth")
 def mp_auth():
     user_id = request.args.get("user_id")
     if not user_id:
         return jsonify({"error": "Falta user_id"}), 400
 
-    # Construimos la URL de autorización de MP
-    # state = user_id para identificar al usuario cuando MP llame al callback
     url = (
         f"https://auth.mercadopago.com/authorization"
         f"?client_id={MP_CLIENT_ID}"
@@ -34,16 +30,14 @@ def mp_auth():
 
 
 # ── 2. Callback — MP redirige acá con el code ──────────────
-# MP llama a esta URL con ?code=xxx&state=user_id
 @mp_bp.route("/mp/callback")
 def mp_callback():
     code    = request.args.get("code")
-    user_id = request.args.get("state")  # el user_id que mandamos como state
+    user_id = request.args.get("state")
 
     if not code or not user_id:
         return jsonify({"error": "Faltan parámetros"}), 400
 
-    # Intercambiamos el code por un access_token
     respuesta = requests.post(
         "https://api.mercadopago.com/oauth/token",
         json={
@@ -63,10 +57,8 @@ def mp_callback():
     refresh_token = datos.get("refresh_token")
     mp_user_id    = datos.get("user_id")
 
-    # Guardamos el token en Supabase
     guardar_token_mp(user_id, access_token, refresh_token, mp_user_id)
 
-    # Redirigimos a la app via deep link — la app detecta que la conexión fue exitosa
     deep_link = f"com.candlelabs.gestionpersonal://mp-callback?status=ok"
     return redirect(deep_link)
 
@@ -75,7 +67,6 @@ def mp_callback():
 @mp_bp.route("/mp/movimientos")
 @token_required
 def mp_movimientos(user_id):
-    # Obtenemos el token guardado del usuario
     token_data = obtener_token_mp(user_id)
     if not token_data:
         return jsonify({"error": "No hay cuenta de MP conectada"}), 404
@@ -83,13 +74,11 @@ def mp_movimientos(user_id):
     access_token = token_data["access_token"]
     mp_user_id   = token_data["mp_user_id"]
 
-    # Traemos los movimientos de la cuenta de MP
-    # offset y limit para paginación
     offset = int(request.args.get("offset", 0))
     limit  = int(request.args.get("limit", 20))
 
     respuesta = requests.get(
-        f"https://api.mercadopago.com/v1/account/movements/search",
+        "https://api.mercadopago.com/v1/account/movements/search",
         headers={"Authorization": f"Bearer {access_token}"},
         params={
             "limit":  limit,
@@ -98,21 +87,26 @@ def mp_movimientos(user_id):
     )
 
     if respuesta.status_code == 401:
-        # Token expirado — necesitamos renovarlo
         return jsonify({"error": "Token expirado", "codigo": "token_expired"}), 401
 
     if respuesta.status_code != 200:
-        return jsonify({"error": "Error al obtener movimientos", "detalle": respuesta.json()}), 400
+        # ── DEBUG — sacar después de resolver el 400 ──────
+        print("=== ERROR MP ===")
+        print("STATUS:", respuesta.status_code)
+        print("BODY:", respuesta.text)
+        print("================")
+        return jsonify({"error": "Error al obtener movimientos", "detalle": respuesta.text}), 400
 
     return jsonify(respuesta.json())
 
+
 # ── 4. Estado — verifica si el usuario ya tiene MP conectado ──
-# No llama a la API de MP, solo mira si hay token en Supabase
 @mp_bp.route("/mp/estado")
 @token_required
 def mp_estado(user_id):
     token_data = obtener_token_mp(user_id)
     return jsonify({"conectado": token_data is not None})
+
 
 # ── 5. Desconectar MP ──────────────────────────────────────
 @mp_bp.route("/mp/desconectar", methods=["DELETE"])
